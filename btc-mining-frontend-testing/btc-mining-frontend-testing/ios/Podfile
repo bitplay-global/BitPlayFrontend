@@ -1,0 +1,58 @@
+# Resolve react_native_pods.rb with node to allow for hoisting
+require_relative '../node_modules/react-native/scripts/react_native_pods'
+
+platform :ios, '16.0'
+prepare_react_native_project!
+
+linkage = ENV['USE_FRAMEWORKS']
+
+use_frameworks! :linkage => :static
+
+target 'BitPlayPro' do
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    :hermes_enabled => false,
+    :fabric_enabled => true,
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  # InMobi mediation adapter (AdMob mediation — bidding, SDK-based).
+  # 10.8.8.0 was built and tested against Google Mobile Ads SDK 12.11.0,
+  # which is exactly our pinned version (react-native-google-mobile-ads).
+  pod 'GoogleMobileAdsMediationInMobi', '10.8.8.0'
+
+  post_install do |installer|
+    react_native_post_install(installer)
+
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
+
+        # Fix fmt consteval errors with Xcode 26 / Clang 17 (C++20 consteval stricter)
+        if ['fmt', 'glog', 'React-runtimeexecutor', 'React-cxxreact'].include?(target.name)
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+          cflags = config.build_settings['OTHER_CPLUSPLUSFLAGS'] || '$(inherited)'
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = "#{cflags} -DFMT_USE_CONSTEVAL=0"
+          defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+          defs = [defs] unless defs.is_a?(Array)
+          defs << 'FMT_USE_CONSTEVAL=0' unless defs.include?('FMT_USE_CONSTEVAL=0')
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
+        end
+
+        # Fix MMKVCore memset_s on iOS 26 SDK
+        if target.name == 'MMKVCore'
+          cflags = config.build_settings['OTHER_CPLUSPLUSFLAGS'] || '$(inherited)'
+          config.build_settings['OTHER_CPLUSPLUSFLAGS'] = "#{cflags} -D__STDC_WANT_LIB_EXT1__=1"
+        end
+
+        # Disable code signing on all Pod targets (not needed, avoids Xcode 26 errors)
+        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+        config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+        config.build_settings['CODE_SIGN_IDENTITY'] = ''
+      end
+    end
+  end
+
+end

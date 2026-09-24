@@ -1,0 +1,121 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
+apply plugin: "com.google.gms.google-services"
+
+react {
+    autolinkLibrariesWithApp()
+}
+
+def enableProguardInReleaseBuilds = false
+
+def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+
+def releaseSigning = { String name -> project.findProperty(name) ?: System.getenv(name) }
+
+// Fail a release build early, with instructions, rather than deep in signing.
+gradle.taskGraph.whenReady { graph ->
+    def releasing = graph.allTasks.any { it.name.toLowerCase().contains('release') && (it.name.startsWith('assemble') || it.name.startsWith('bundle') || it.name.startsWith('package')) }
+    if (releasing && !(releaseSigning('BITPLAY_UPLOAD_STORE_PASSWORD') && releaseSigning('BITPLAY_UPLOAD_KEY_PASSWORD'))) {
+        throw new GradleException(
+            "Release signing is not configured. Set BITPLAY_UPLOAD_STORE_PASSWORD and " +
+            "BITPLAY_UPLOAD_KEY_PASSWORD (and optionally BITPLAY_UPLOAD_STORE_FILE / " +
+            "BITPLAY_UPLOAD_KEY_ALIAS) in ~/.gradle/gradle.properties or the environment. " +
+            "The keystore is no longer in git; keep your copy safe.")
+    }
+}
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+
+    namespace "com.bitplay.app"
+    defaultConfig {
+        applicationId "com.bitplay.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 260
+        versionName "2.0.1"
+    }
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        // The upload key and its password used to be committed here and in the
+        // repository root. They now come from Gradle properties
+        // (~/.gradle/gradle.properties) or environment variables, so neither
+        // the key file nor its password lives in git.
+        release {
+            storeFile file(releaseSigning('BITPLAY_UPLOAD_STORE_FILE') ?: '../../upload-keystore.jks')
+            storePassword releaseSigning('BITPLAY_UPLOAD_STORE_PASSWORD')
+            keyAlias releaseSigning('BITPLAY_UPLOAD_KEY_ALIAS') ?: 'upload'
+            keyPassword releaseSigning('BITPLAY_UPLOAD_KEY_PASSWORD')
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            // Using release keystore for production build
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            // -optimize variant: the plain proguard-android.txt disables the
+            // optimisation passes Play Console is scoring.
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            debuggable false
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+}
+
+project.ext.react = [
+  enableHermes: true,
+]
+
+dependencies {
+    // The version of react-native is set by the React Native Gradle Plugin
+    implementation("com.facebook.react:react-android")
+
+    // Firebase BoM manages versions
+    implementation platform('com.google.firebase:firebase-bom:33.2.0')
+    implementation 'com.google.firebase:firebase-messaging'
+
+    // Google Sign-in
+    implementation 'com.google.android.gms:play-services-auth:20.7.0'
+
+    // Google Advertising ID (required by Apptrove SDK)
+    implementation 'com.google.android.gms:play-services-ads-identifier:18.0.1'
+    implementation 'androidx.annotation:annotation:1.6.0'
+
+    // InMobi mediation adapter (AdMob mediation — bidding, SDK-based).
+    // 10.8.3.1 was built against Google Mobile Ads SDK 24.2.0; there's no
+    // adapter release built exactly for our pinned 24.6.0 (react-native-
+    // google-mobile-ads), so using the nearest LOWER version rather than a
+    // newer one (11.1.0.1, built for 24.9.0) — adapters are generally
+    // forward-compatible with newer base SDK versions within the same major
+    // line (24.x) since they call stable public APIs, but not the reverse.
+    implementation('com.google.ads.mediation:inmobi:10.8.3.1') {
+        // Excludes a transitive JaCoCo (code coverage) reference that broke
+        // R8 minification — java.lang.instrument doesn't exist on Android
+        // and this code path never actually runs at runtime.
+        exclude group: 'org.jacoco'
+    }
+
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation jscFlavor
+    }
+}

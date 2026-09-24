@@ -1,0 +1,100 @@
+declare module 'react-native-apptrove' {
+  export class ApptroveConfig {
+    constructor(appToken: string, environment: string);
+    static EnvironmentDevelopment: string;
+    static EnvironmentProduction: string;
+    static EnvironmentTesting: string;
+    static IN: string;
+    static GLOBAL: string;
+    setAppSecret(key: string, value: string): void;
+    setManualMode(value: boolean): void;
+    disableOrganicTracking(value: boolean): void;
+    setAttributionParams(params: Record<string, string>): void;
+    setRegion(value: string): void;
+    setFacebookAppId(value: string): void;
+    setAndroidId(value: string): void;
+    setAppId(value: string): void;
+    setEncryptionType(value: string): void;
+    setEncryptionKey(value: string): void;
+    setDeferredDeeplinkCallbackListener(listener: (link: string) => void): void;
+  }
+
+  export class ApptroveEvent {
+    constructor(eventId: string);
+    static LEVEL_ACHIEVED: string;
+    static ADD_TO_CART: string;
+    static ADD_TO_WISHLIST: string;
+    static COMPLETE_REGISTRATION: string;
+    static TUTORIAL_COMPLETION: string;
+    static PURCHASE: string;
+    static SUBSCRIBE: string;
+    static START_TRIAL: string;
+    static ACHIEVEMENT_UNLOCKED: string;
+    static CONTENT_VIEW: string;
+    static TRAVEL_BOOKING: string;
+    static SHARE: string;
+    static INVITE: string;
+    static LOGIN: string;
+    static UPDATE: string;
+    eventId: string;
+    orderId: string | null;
+    currency: string | null;
+    discount: number;
+    couponCode: string | null;
+    productId: string | null;
+    param1: string | null;
+    param2: string | null;
+    param3: string | null;
+    param4: string | null;
+    param5: string | null;
+    param6: string | null;
+    param7: string | null;
+    param8: string | null;
+    param9: string | null;
+    param10: string | null;
+    revenue: number;
+    setEventValue(key: string, value: unknown): void;
+  }
+
+  export const ApptroveSDK: {
+    initialize(config: ApptroveConfig): void;
+    setEnabled(value: boolean): void;
+    getApptroveId(): Promise<string>;
+    setUserId(userId: string): void;
+    setUserEmail(userEmail: string): void;
+    setUserName(userName: string): void;
+    setUserPhone(userPhone: string): void;
+    trackAsOrganic(value: boolean): void;
+    setLocalRefTrack(value: string, delimiter: string): void;
+    setUserAdditionalDetails(details: Record<string, string>): void;
+    waitForATTUserAuthorization(timeoutInterval: number): void;
+    updateAppleAdsToken(value: string): void;
+    fireInstall(): void;
+    parseDeepLink(value: string): void;
+    setIMEI(imei1: string, imei2: string): void;
+    setMacAddress(value: string): void;
+    storeRetargetting(value: string): void;
+    getAd(): string;
+    getAdID(): string;
+    getAdSet(): string;
+    getCampaign(): string;
+    getCampaignID(): string;
+    getChannel(): string;
+    getP1(): string;
+    getP2(): string;
+    getP3(): string;
+    getP4(): string;
+    getP5(): string;
+    getClickId(): string;
+    getDlv(): string;
+    getPid(): string;
+    getIsRetargeting(): boolean;
+    createDynamicLink(linkConfig: Record<string, string>): Promise<string>;
+    resolveDeeplinkUrl(url: string): Promise<string>;
+    subscribeAttributionlink(): void;
+    updatePostbackConversion(conversionValue: number): void;
+    sendFcmToken(token: string): void;
+    sendAPNToken(token: string): void;
+    trackEvent(event: ApptroveEvent): void;
+  };
+}

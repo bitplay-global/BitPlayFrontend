@@ -1,0 +1,196 @@
+name: Android Build (AAB + APK)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: Build Android Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # The upload keystore and its passwords are no longer committed. They come
+      # from repository secrets:
+      #   BITPLAY_UPLOAD_KEYSTORE_BASE64  base64 of upload-keystore.jks
+      #   BITPLAY_UPLOAD_STORE_PASSWORD
+      #   BITPLAY_UPLOAD_KEY_PASSWORD
+      # Checked first so a missing secret fails in seconds with instructions,
+      # not after the dependency install and Gradle configuration.
+      - name: Restore upload keystore
+        run: |
+          set -eu
+          missing=""
+          [ -n "$KEYSTORE_B64" ] || missing="$missing BITPLAY_UPLOAD_KEYSTORE_BASE64"
+          [ -n "$STORE_PASSWORD" ] || missing="$missing BITPLAY_UPLOAD_STORE_PASSWORD"
+          [ -n "$KEY_PASSWORD" ] || missing="$missing BITPLAY_UPLOAD_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload-keystore.jks"
+          keytool -list -keystore "$RUNNER_TEMP/upload-keystore.jks" -storepass "$STORE_PASSWORD" -alias upload > /dev/null \
+            || { echo "::error::Keystore secret does not open with BITPLAY_UPLOAD_STORE_PASSWORD, or has no 'upload' alias."; exit 1; }
+          echo "Upload keystore restored."
+        env:
+          KEYSTORE_B64: ${{ secrets.BITPLAY_UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.BITPLAY_UPLOAD_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.BITPLAY_UPLOAD_KEY_PASSWORD }}
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: btc-mining-frontend-testing/btc-mining-frontend-testing/package-lock.json
+
+      - name: Install JS dependencies
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing
+        run: npm install --legacy-peer-deps
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('btc-mining-frontend-testing/btc-mining-frontend-testing/android/**/*.gradle*', 'btc-mining-frontend-testing/btc-mining-frontend-testing/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      - name: Make Gradle executable
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing/android
+        run: chmod +x gradlew
+
+      # Derives versionCode automatically so releases no longer need a manual
+      # bump commit before every pipeline run.
+      #
+      # github.run_number increases by one per run of this workflow and is not
+      # reset by re-runs, which gives the strictly-increasing sequence Play
+      # Console requires. BASE offsets it past the codes already published by
+      # hand (259/260); raise the ANDROID_VERSION_CODE_BASE repo variable if the
+      # run counter is ever reset (e.g. the workflow file is renamed) so the
+      # sequence cannot go backwards.
+      #
+      # The final guard takes whichever is higher -- the computed value or one
+      # above whatever is committed in build.gradle -- so a manually-bumped
+      # value in the repo always acts as a floor and can never be undercut.
+      #
+      # This edits build.gradle in the runner's checkout only; nothing is
+      # committed back, so there is no risk of a push loop.
+      - name: Derive versionCode
+        id: version_code
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing/android/app
+        run: |
+          set -euo pipefail
+          FILE_CODE=$(grep -m1 'versionCode' build.gradle | tr -dc '0-9')
+          BASE="${ANDROID_VERSION_CODE_BASE:-260}"
+          CANDIDATE=$(( BASE + ${{ github.run_number }} ))
+          if [ "$CANDIDATE" -le "$FILE_CODE" ]; then
+            CANDIDATE=$(( FILE_CODE + 1 ))
+          fi
+          echo "Committed versionCode: $FILE_CODE | base: $BASE | run: ${{ github.run_number }} -> using $CANDIDATE"
+          sed -i "s/versionCode .*/versionCode $CANDIDATE/" build.gradle
+          grep -n 'versionCode\|versionName' build.gradle
+        env:
+          ANDROID_VERSION_CODE_BASE: ${{ vars.ANDROID_VERSION_CODE_BASE }}
+
+      - name: Build Release AAB
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing/android
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
+        env:
+          JAVA_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g"
+          BITPLAY_UPLOAD_STORE_FILE: ${{ runner.temp }}/upload-keystore.jks
+          BITPLAY_UPLOAD_KEY_ALIAS: upload
+          BITPLAY_UPLOAD_STORE_PASSWORD: ${{ secrets.BITPLAY_UPLOAD_STORE_PASSWORD }}
+          BITPLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.BITPLAY_UPLOAD_KEY_PASSWORD }}
+
+      - name: Build Release APK
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing/android
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          JAVA_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g"
+          BITPLAY_UPLOAD_STORE_FILE: ${{ runner.temp }}/upload-keystore.jks
+          BITPLAY_UPLOAD_KEY_ALIAS: upload
+          BITPLAY_UPLOAD_STORE_PASSWORD: ${{ secrets.BITPLAY_UPLOAD_STORE_PASSWORD }}
+          BITPLAY_UPLOAD_KEY_PASSWORD: ${{ secrets.BITPLAY_UPLOAD_KEY_PASSWORD }}
+
+      - name: Remove upload keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload-keystore.jks"
+
+      - name: Get app version
+        id: app_version
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing/android/app
+        run: |
+          VERSION_NAME=$(grep "versionName" build.gradle | head -1 | sed 's/.*versionName "\(.*\)".*/\1/')
+          VERSION_CODE=$(grep "versionCode" build.gradle | head -1 | sed 's/.*versionCode \(.*\)/\1/')
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitplay-release-${{ steps.app_version.outputs.version_name }}-(${{ steps.app_version.outputs.version_code }})-aab
+          path: btc-mining-frontend-testing/btc-mining-frontend-testing/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitplay-release-${{ steps.app_version.outputs.version_name }}-(${{ steps.app_version.outputs.version_code }})-apk
+          path: btc-mining-frontend-testing/btc-mining-frontend-testing/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      - name: Upload mapping.txt artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitplay-release-${{ steps.app_version.outputs.version_name }}-(${{ steps.app_version.outputs.version_code }})-mapping
+          path: btc-mining-frontend-testing/btc-mining-frontend-testing/android/app/build/outputs/mapping/release/mapping.txt
+          retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v${{ steps.app_version.outputs.version_name }}-${{ steps.app_version.outputs.version_code }}
+          name: BitPlayPro v${{ steps.app_version.outputs.version_name }} (build ${{ steps.app_version.outputs.version_code }})
+          body: |
+            ## BitPlayPro Android Release
+
+            **Version:** ${{ steps.app_version.outputs.version_name }}
+            **Build:** ${{ steps.app_version.outputs.version_code }}
+
+            ### What's in this release
+            - Server-side RevenueCat purchase verification (iOS + Android keys)
+            - Duplicate purchase guard
+            - Mobile auth headers on all withdrawal requests
+            - Admin-gated withdrawals — no payment without admin approval
+            - Balance check before withdrawal queuing
+            - Daily miner + reward endpoints secured
+            - Webhook hardened
+
+            ### Files
+            - `app-release.aab` — upload to Google Play Console
+            - `app-release.apk` — direct install / testing
+          files: |
+            btc-mining-frontend-testing/btc-mining-frontend-testing/android/app/build/outputs/bundle/release/app-release.aab
+            btc-mining-frontend-testing/btc-mining-frontend-testing/android/app/build/outputs/apk/release/app-release.apk
+            btc-mining-frontend-testing/btc-mining-frontend-testing/android/app/build/outputs/mapping/release/mapping.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

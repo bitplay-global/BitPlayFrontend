@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">BitPlay</string>
+
+    <!-- Facebook App ID - Replace with your actual Facebook App ID -->
+    <string name="facebook_app_id">562940163421308</string>
+    <string name="facebook_client_token">6e4df0ec0e9dcaaf36a0f68e0bd35691</string>
+    <string name="fb_login_protocol_scheme">fb562940163421308</string>
+
+    <!-- Google Web Client ID - Replace with your actual Google Web Client ID -->
+    <string name="google_web_client_id">1041648646860-lmiast9jtve78qvnd1sfgsfkocoif2oa.apps.googleusercontent.com</string>
+</resources>

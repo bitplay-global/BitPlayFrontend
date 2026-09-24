@@ -1,0 +1,74 @@
+workflows:
+  android-release:
+    name: Android Release (AAB + APK)
+    max_build_duration: 60
+    environment:
+      vars:
+        PACKAGE_NAME: "com.bitplay.app"
+      node: 18.18.0
+      java: 17
+    scripts:
+      - name: Install JS dependencies
+        working_directory: btc-mining-frontend-testing/btc-mining-frontend-testing
+        script: npm install --legacy-peer-deps
+      - name: Build Android release AAB
+        working_directory: btc-mining-frontend-testing/btc-mining-frontend-testing/android
+        script: |
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=$CM_KEYSTORE_PATH \
+            -Pandroid.injected.signing.store.password=$CM_KEYSTORE_PASSWORD \
+            -Pandroid.injected.signing.key.alias=$CM_KEY_ALIAS \
+            -Pandroid.injected.signing.key.password=$CM_KEY_PASSWORD
+      - name: Build Android release APK
+        working_directory: btc-mining-frontend-testing/btc-mining-frontend-testing/android
+        script: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$CM_KEYSTORE_PATH \
+            -Pandroid.injected.signing.store.password=$CM_KEYSTORE_PASSWORD \
+            -Pandroid.injected.signing.key.alias=$CM_KEY_ALIAS \
+            -Pandroid.injected.signing.key.password=$CM_KEY_PASSWORD
+    artifacts:
+      - btc-mining-frontend-testing/btc-mining-frontend-testing/android/app/build/outputs/bundle/release/app-release.aab
+      - btc-mining-frontend-testing/btc-mining-frontend-testing/android/app/build/outputs/apk/release/app-release.apk
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true
+
+  # iOS Release workflow builds IPA and pushes to TestFlight using App Store Connect integration
+  ios-release:
+    name: iOS Release (IPA)
+    max_build_duration: 90
+    integrations:
+      app_store_connect: CodeMagic
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.bitplaypro.bitplaypro
+      vars:
+        XCODE_WORKSPACE: btc-mining-frontend-testing/btc-mining-frontend-testing/ios/BitPlayPro.xcworkspace
+        XCODE_SCHEME: BitPlayPro
+      node: 18.18.0
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install JS dependencies
+        working_directory: btc-mining-frontend-testing/btc-mining-frontend-testing
+        script: npm install --legacy-peer-deps
+      - name: Install CocoaPods
+        working_directory: btc-mining-frontend-testing/btc-mining-frontend-testing/ios
+        script: pod install
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false

@@ -1,0 +1,185 @@
+name: iOS Build (IPA)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios:
+    name: Build iOS Release
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: btc-mining-frontend-testing/btc-mining-frontend-testing/package-lock.json
+
+      - name: Install JS dependencies
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing
+        run: npm install --legacy-peer-deps
+
+      - name: Install CocoaPods
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing/ios
+        run: pod install --repo-update
+
+      - name: Patch source files for Xcode compatibility
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing
+        run: |
+          FMT_FILE="ios/Pods/fmt/include/fmt/format-inl.h"
+          if [ -f "$FMT_FILE" ]; then
+            sed -i '' 's/FMT_USE_CONSTEVAL/0 \&\& FMT_USE_CONSTEVAL/g' "$FMT_FILE" || true
+          fi
+          MMKV_FILE="ios/Pods/MMKVCore/Core/aes/AESCrypt.cpp"
+          if [ -f "$MMKV_FILE" ]; then
+            sed -i '' 's/(void)memset_s(ptr, len, 0, len);/{ volatile uint8_t *vp = (volatile uint8_t*)ptr; for(size_t _i=0;_i<(size_t)len;_i++) vp[_i]=0; }/' "$MMKV_FILE" || true
+          fi
+
+      - name: Import distribution certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 -D > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH $(security list-keychain -d user | tr -d '\"')
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          echo "=== Distribution certificate installed ==="
+          security find-identity -v -p codesigning $KEYCHAIN_PATH
+
+      - name: Install provisioning profile
+        run: |
+          PROFILE_B64="btc-mining-frontend-testing/btc-mining-frontend-testing/ios/BitPlayPro.mobileprovision.b64"
+          PROFILE_SIZE=$(wc -c < "$PROFILE_B64")
+          echo "Profile b64 file size: $PROFILE_SIZE bytes"
+          if [ "$PROFILE_SIZE" -lt 1000 ]; then
+            echo "ERROR: Profile file too small ($PROFILE_SIZE bytes)"
+            exit 1
+          fi
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          PROFILE_UUID="a6acd01d-d401-4ace-9933-0c3d68a38d9d"
+          cat "$PROFILE_B64" | base64 -D > "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          INSTALLED_SIZE=$(wc -c < "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision")
+          echo "Installed profile size: $INSTALLED_SIZE bytes (UUID: $PROFILE_UUID)"
+          if [ "$INSTALLED_SIZE" -lt 5000 ]; then
+            echo "ERROR: Installed profile too small"
+            exit 1
+          fi
+
+      - name: Set up App Store Connect API key
+        env:
+          ASC_API_KEY_CONTENT: ${{ secrets.ASC_API_KEY_CONTENT }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$ASC_API_KEY_CONTENT" | base64 -D > ~/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8
+          echo "=== ASC API key installed ==="
+
+      - name: Archive
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -o pipefail
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          xcodebuild \
+            -workspace ios/BitPlayPro.xcworkspace \
+            -scheme BitPlayPro \
+            -configuration Release \
+            -destination generic/platform=iOS \
+            -archivePath $RUNNER_TEMP/BitPlayPro.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="a6acd01d-d401-4ace-9933-0c3d68a38d9d" \
+            DEVELOPMENT_TEAM=L99G6M8D7G \
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/app-signing.keychain-db" \
+            archive 2>&1 | tee $RUNNER_TEMP/xcodebuild-archive.log | xcpretty --color
+          ARCHIVE_EXIT=${PIPESTATUS[0]}
+          if [ "$ARCHIVE_EXIT" -ne 0 ]; then
+            echo "=== ARCHIVE FAILED - last 200 lines ==="
+            tail -200 $RUNNER_TEMP/xcodebuild-archive.log
+            exit $ARCHIVE_EXIT
+          fi
+          echo "=== Archive succeeded ==="
+          ls -la $RUNNER_TEMP/BitPlayPro.xcarchive/
+
+      - name: Export IPA
+        working-directory: btc-mining-frontend-testing/btc-mining-frontend-testing
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          mkdir -p $RUNNER_TEMP/ipa
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/BitPlayPro.xcarchive \
+            -exportPath $RUNNER_TEMP/ipa \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/app-signing.keychain-db" \
+            2>&1 | tee $RUNNER_TEMP/xcodebuild-export.log | xcpretty --color
+          EXPORT_EXIT=${PIPESTATUS[0]}
+          if [ "$EXPORT_EXIT" -ne 0 ]; then
+            echo "=== EXPORT FAILED - last 200 lines ==="
+            tail -200 $RUNNER_TEMP/xcodebuild-export.log
+            exit $EXPORT_EXIT
+          fi
+          echo "=== IPA exported ==="
+          ls -lh $RUNNER_TEMP/ipa/
+
+      - name: Upload to TestFlight
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          IPA_PATH=$(find $RUNNER_TEMP/ipa -name "*.ipa" | head -1)
+          echo "=== Uploading $IPA_PATH to TestFlight ==="
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$ASC_API_KEY_ID" \
+            --apiIssuer "$ASC_API_ISSUER_ID" \
+            --verbose 2>&1
+          echo "=== Upload complete ==="
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bitplay-ios-release-ipa
+          path: ${{ runner.temp }}/ipa/*.ipa
+          retention-days: 30
+
+      - name: Upload build logs on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: xcodebuild-logs
+          path: |
+            ${{ runner.temp }}/xcodebuild-archive.log
+            ${{ runner.temp }}/xcodebuild-export.log
+          retention-days: 7
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true

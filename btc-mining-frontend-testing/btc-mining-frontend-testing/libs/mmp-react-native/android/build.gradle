@@ -1,0 +1,58 @@
+// Consumed by a host app through React Native autolinking. BitPlay's root
+// android/build.gradle puts AGP and the Kotlin Gradle plugin on the
+// classpath the legacy way (buildscript { dependencies { classpath(...) } },
+// no explicit version here -- resolved via react-native-gradle-plugin), so
+// this module applies them unversioned rather than through a versioned
+// plugins {} block. The two don't mix: a versioned plugins{} request for a
+// plugin already on the classpath via the legacy mechanism fails with
+// "already on the classpath with an unknown version, so compatibility
+// cannot be checked" -- that's the real error this produced before, not a
+// version mismatch as it may first appear.
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+
+android {
+    namespace "com.mmp"
+    compileSdk 36
+
+    defaultConfig {
+        // 21 rather than higher: this is a measurement SDK and raising the
+        // floor would cut a host app off from devices it can otherwise serve.
+        minSdk 21
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlin {
+        compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 }
+    }
+
+    lint {
+        warningsAsErrors true
+        abortOnError true
+
+        // Two checks that report on the outside world rather than on this
+        // module: "a newer com.android.library exists", "a newer
+        // play-services-ads-identifier exists". Neither describes a defect
+        // here, and with warningsAsErrors both fail a build that nobody
+        // touched, on a schedule set by other people's releases. A green build
+        // that turns red overnight without a commit trains everyone to ignore
+        // it, which costs more than the staleness they were warning about.
+        //
+        // Upgrades stay deliberate: bump a version because something needs it,
+        // having read what changed, not because a linter noticed a release.
+        disable += ["GradleDependency", "AndroidGradlePluginVersion"]
+    }
+}
+
+dependencies {
+    // compileOnly throughout. A measurement SDK that forces its own version of
+    // React Native or Play Services on a host app is a dependency conflict in
+    // someone else's release; every one of these is reached through code that
+    // already handles its absence.
+    compileOnly "com.facebook.react:react-android:0.76.5"
+    compileOnly "com.google.android.gms:play-services-ads-identifier:18.0.1"
+    compileOnly "com.android.installreferrer:installreferrer:2.2"
+}
