@@ -305,13 +305,6 @@ const Page: React.FC = () => {
   const [userBalance, setUserWalletBalance] = useState(cachedHome?.userBalance ?? 0);
   const [userBalanceBTC, setUserBTCWalletBalance] = useState(cachedHome?.userBalanceBTC ?? 0); // Past accumulated mining (BTC_DEPOSIT)
   const [totalHistoricalBTC, setTotalHistoricalBTC] = useState(cachedHome?.totalHistoricalBTC ?? 0); // Sum from Balance History
-  const [showBalanceHint, setShowBalanceHint] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setShowBalanceHint(false), 7000);
-    return () => clearTimeout(timer);
-  }, []);
-
   const { hashPower, setHashPower, addHashPower, resetHashPower, purchasedHashpowerGh, setPurchasedHashpowerGh, setIsMiningActive } =
     useHashPower();
   const [adsWatched, setAdsWatched] = useState(cachedHome?.adsWatched ?? 0);
@@ -566,8 +559,12 @@ const Page: React.FC = () => {
 
   const { formatted: formattedTimer, seconds: timerSecs } = useCountdown(serverTimeRemaining);
 
-  // Current session mined (adds during active mining) + sum from Balance History
-  const totalBtc = (btcBalance || 0) + (totalHistoricalBTC || 0);
+  // Same formula as the Wallet and Withdraw screens (BTC + BTC_DEPOSIT): today's
+  // session, which the app syncs to the server's BTC field, plus BTC_DEPOSIT,
+  // the balance every credit (settlement, referral rewards, deposits) and debit
+  // (withdrawals) goes through. Was the lifetime Balance History sum, which
+  // withdrawals never reduce and referral rewards never raise.
+  const totalBtc = (btcBalance || 0) + (userBalanceBTC || 0);
 
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [faqVisible, setFaqVisible] = useState(false);
@@ -1817,9 +1814,6 @@ const Page: React.FC = () => {
                   ) : (
                     <>
                       <OdometerCounter value={totalBtc} />
-                      {showBalanceHint && (
-                        <Text style={styles.detailSubtitle}>Your total balance — never resets</Text>
-                      )}
                     </>
                   )}
                 </View>
