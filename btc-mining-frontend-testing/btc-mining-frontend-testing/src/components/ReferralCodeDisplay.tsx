@@ -9,7 +9,7 @@ const ReferralCodeDisplay: React.FC = () => {
   useEffect(() => {
     const loadReferralCode = async () => {
       const code = getReferralCode();
-      setReferralCode(code);
+      setReferralCode(code ?? null);
     };
     loadReferralCode();
   }, []);

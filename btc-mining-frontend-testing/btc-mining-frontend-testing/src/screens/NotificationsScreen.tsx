@@ -73,7 +73,7 @@ const NotificationScreen = () => {
       const navigation = useNavigation<SidebarNavigationProp>();
 
   // Group notifications by date
-  const grouped = notifications.reduce((acc, curr) => {
+  const grouped = notifications.reduce<Record<string, (typeof notifications)[number][]>>((acc, curr) => {
     acc[curr.date] = acc[curr.date] || [];
     acc[curr.date].push(curr);
     return acc;

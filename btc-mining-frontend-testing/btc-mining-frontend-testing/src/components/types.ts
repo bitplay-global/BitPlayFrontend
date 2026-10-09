@@ -1,3 +1,6 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
+import type { MainTabParamList } from '../navigation/MainTabNavigator';
+
 export type RootStackParamList = {
   Splash: undefined;
   Login: undefined;
@@ -11,9 +14,11 @@ export type RootStackParamList = {
     fromLogin?: boolean;
   };
   ChangePassword: { email: string; resetToken: string };
-  Main: undefined;
+  // Optional params: lets callers open a specific tab, e.g. { screen: 'Home' }.
+  Main: NavigatorScreenParams<MainTabParamList> | undefined;
   TwofactorOTP: { token: string; user: any };
-  ReferralScreen: { token: string; user: any; fromLogin?: boolean; isNewUser?: boolean };
+  // token is optional: ReferralScreen treats a missing token as "not signed in".
+  ReferralScreen: { token?: string; user: any; fromLogin?: boolean; isNewUser?: boolean };
   MyProfileScreen: undefined;
   UpdateEmail: undefined;
   TwoFactorScreen: undefined;

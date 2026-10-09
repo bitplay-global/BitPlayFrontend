@@ -10,7 +10,8 @@
     "ios:device": "react-native run-ios -- --allowProvisioningUpdates",
     "lint": "eslint .",
     "start": "npx react-native start --reset-cache",
-    "test": "jest"
+    "test": "jest",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@invertase/react-native-apple-authentication": "^2.4.1",

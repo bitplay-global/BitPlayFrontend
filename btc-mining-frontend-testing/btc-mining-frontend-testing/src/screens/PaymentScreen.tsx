@@ -218,7 +218,7 @@ const MakePaymentScreen = ({ navigation, route }: any) => {
         ]
       );
     } else {
-      alert(`Error: ${result.error}`);
+      Alert.alert('Error', String(result.error ?? 'Payment failed'));
     }
   }
 

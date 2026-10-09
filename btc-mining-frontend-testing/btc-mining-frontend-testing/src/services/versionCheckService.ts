@@ -137,10 +137,6 @@ export async function checkForceUpdate(): Promise<ForceUpdateResult> {
   const forceUpdate =
     latest != null && latest !== '' && compareVersions(latest, current) > 0;
 
-    console.log("latest", latest)
-    console.log("current", current)
-    console.log("compareVersions(latest, current)", compareVersions(latest, current))
-    console.log("forceUpdate", forceUpdate)
 
   return {
     forceUpdate,

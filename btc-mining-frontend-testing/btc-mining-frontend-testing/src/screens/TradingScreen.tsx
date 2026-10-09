@@ -602,7 +602,7 @@ export default function TradingScreen() {
             if (data.success) {
               setStockGameBonus(data.stockGameBonus);
             } else if (retries > 0) {
-              await new Promise((r) => setTimeout(r, 1000));
+              await new Promise<void>((r) => setTimeout(() => r(), 1000));
               return attemptClaim(retries - 1);
             }
           };

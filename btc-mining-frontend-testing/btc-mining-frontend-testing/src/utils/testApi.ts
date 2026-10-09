@@ -13,14 +13,22 @@ export const testApiConnectivity = async (): Promise<{
 }> => {
   try {
     
-    // Try to fetch health endpoint
-    const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.HEALTH}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      timeout: 5000, // 5 second timeout
-    });
+    // Try to fetch health endpoint. fetch has no `timeout` option (it was
+    // silently ignored); abort after 5 seconds instead.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.HEALTH}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
 
     if (response.ok) {
       const data = await response.json();

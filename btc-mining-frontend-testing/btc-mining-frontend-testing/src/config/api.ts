@@ -418,10 +418,9 @@ export const apiClient: AxiosInstance = (() => {
         data: config.data != null ? redact(config.data) : undefined,
       });
       const fullUrl = `${config.baseURL || ''}${config.url || ''}`;
-      config.headers = attachMobileSecurityHeaders(
-        (config.headers || {}) as Record<string, string>,
-        fullUrl
-      );
+      // Adds the mobile security headers (if this URL gets them) without
+      // replacing the AxiosHeaders instance axios expects.
+      config.headers.set(attachMobileSecurityHeaders({}, fullUrl));
       return config;
     },
     (err) => {

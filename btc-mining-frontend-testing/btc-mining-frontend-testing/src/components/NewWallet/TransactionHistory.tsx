@@ -22,6 +22,12 @@ const getStatusColor = (status?: string): string => {
   }
 };
 
+// Amounts arrive as a number or as a Mongo Decimal128 ({ $numberDecimal }).
+const amountText = (value: Transaction['amountNumeric']): string => {
+  if (value == null) return '0';
+  return typeof value === 'object' ? value.$numberDecimal : String(value);
+};
+
 const TransactionHistory = ({
   transactions,
 }: {
@@ -74,7 +80,7 @@ const TransactionHistory = ({
                   txn.isPositive ? styles.positiveAmount : styles.negativeAmount,
                 ]}
               >
-                { txn?.amountNumeric ?? '0'}
+                {amountText(txn?.amountNumeric)}
               </Text>
             </View>
           ))}

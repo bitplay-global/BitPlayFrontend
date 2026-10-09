@@ -89,19 +89,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const { data } = await GoogleSignin.signIn();
       const idToken = data?.idToken;
       
-      // iOS: accessToken is included in signIn() response
-      // Android: accessToken is NOT in signIn() response, must call getTokens() separately
-      let accessToken = data?.accessToken || null;
-      if (!accessToken) {
-        try {
-          // On Android, getTokens() is required to retrieve the access token
-          const tokens = await GoogleSignin.getTokens();
-          accessToken = tokens?.accessToken || null;
-        } catch (tokenError) {
-          console.warn('Could not retrieve access token:', tokenError);
-          // Fallback to serverAuthCode (though it's not the same as accessToken)
-          accessToken = data?.serverAuthCode || null;
-        }
+      // The signIn() user object carries no access token on either platform
+      // (google-signin v15); getTokens() is the way to get one.
+      let accessToken: string | null = null;
+      try {
+        const tokens = await GoogleSignin.getTokens();
+        accessToken = tokens?.accessToken || null;
+      } catch (tokenError) {
+        console.warn('Could not retrieve access token:', tokenError);
+        // Fallback to serverAuthCode (though it's not the same as accessToken)
+        accessToken = data?.serverAuthCode || null;
       }
       
       if (!idToken) throw new Error('Google Sign-In failed: No ID token returned.');

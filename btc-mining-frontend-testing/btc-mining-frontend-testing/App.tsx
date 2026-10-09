@@ -45,7 +45,6 @@ import AchievementsScreen from './src/screens/AchievementsScreen';
 import WatchVideoScreen from './src/screens/WatchVideoScreen';
 import TwoFactorScreen from './src/screens/TwoFactorScreen';
 import NotificationPreferencesScreen from './src/screens/NotificationPreferencesScreen';
-import DailyRewardsScreen from './src/screens/DailyRewardsScreen';
 import CryptoDepositScreen from './src/screens/CryptoDepositScreen';
 import BalanceHistoryScreen from './src/screens/BalanceHistoryScreen';
 import MyMinerScreen from './src/screens/MyMiner';
@@ -96,7 +95,24 @@ import { startReferralLinkCapture } from './src/utils/referralLink';
 
 const RootStack = createStackNavigator<RootStackParamList>();
 
-export const navigationRef = createNavigationContainerRef();
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+/**
+ * Where a tapped push notification takes the user. The daily reward is claimed
+ * from the Home screen; DailyRewardsScreen is not registered as a route, so
+ * navigating to it used to do nothing.
+ */
+function openNotificationTarget(type: unknown) {
+  if (!navigationRef.isReady()) return;
+  switch (type) {
+    case 'mining_expired':
+    case 'clock_reset':
+    case 'video_reminder':
+    case 'daily_reward':
+      navigationRef.navigate('Main', { screen: 'Home' });
+      break;
+  }
+}
 
 /**
  * Apptrove uses a different app token per platform in most setups.
@@ -120,7 +136,6 @@ const AppNavigator = () => {
         <>
           <RootStack.Screen name="Main" component={MainTabNavigator} />
           <RootStack.Screen name="BalanceHistoryScreen" component={BalanceHistoryScreen} />
-          {/* <RootStack.Screen name="DailyRewardsScreen" component={DailyRewardsScreen} /> */}
           <RootStack.Screen name="MyProfileScreen" component={MyProfileScreen} />
           <RootStack.Screen name="AllActivity" component={AllActivity} />
           <RootStack.Screen name="InternalReferral" component={InternalReferralScreen} />
@@ -237,18 +252,7 @@ const App = () => {
                 trackNotificationClicked(String(notificationType));
                 trackMmpNotificationClicked(String(notificationType));
               }
-              // Handle notification action based on type
-              if (notificationType === 'mining_expired' || notificationType === 'clock_reset' || notificationType === 'video_reminder') {
-                // Navigate to home screen to watch videos
-                if (navigationRef.isReady()) {
-                  navigationRef.navigate('Main' as never, { screen: 'Home' } as never);
-                }
-              } else if (notificationType === 'daily_reward') {
-                // Navigate to daily rewards screen
-                if (navigationRef.isReady()) {
-                  navigationRef.navigate('DailyRewardsScreen' as never);
-                }
-              }
+              openNotificationTarget(notificationType);
             },
           },
         ]
@@ -269,16 +273,7 @@ const App = () => {
         trackMmpNotificationClicked(String(notificationType));
       }
 
-      // Navigate based on notification type
-      if (notificationType === 'mining_expired' || notificationType === 'clock_reset' || notificationType === 'video_reminder') {
-        if (navigationRef.isReady()) {
-          navigationRef.navigate('Main' as never, { screen: 'Home' } as never);
-        }
-      } else if (notificationType === 'daily_reward') {
-        if (navigationRef.isReady()) {
-          navigationRef.navigate('DailyRewardsScreen' as never);
-        }
-      }
+      openNotificationTarget(notificationType);
     });
 
     // Check if app was opened from a notification when app was quit
@@ -294,16 +289,7 @@ const App = () => {
         trackMmpNotificationClicked(String(notificationType));
       }
 
-          // Navigate based on notification type
-          if (notificationType === 'mining_expired' || notificationType === 'clock_reset' || notificationType === 'video_reminder') {
-            if (navigationRef.isReady()) {
-              navigationRef.navigate('Main' as never, { screen: 'Home' } as never);
-            }
-          } else if (notificationType === 'daily_reward') {
-            if (navigationRef.isReady()) {
-              navigationRef.navigate('DailyRewardsScreen' as never);
-            }
-          }
+          openNotificationTarget(notificationType);
         }
       });
   }, []);

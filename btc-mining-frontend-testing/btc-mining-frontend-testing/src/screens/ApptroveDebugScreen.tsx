@@ -36,7 +36,7 @@ const EVENTS: { label: string; id: string; fn: () => void }[] = [
   { label: 'Checkout Started', id: 'checkout_started', fn: () => trackCheckoutStarted('Debug Plan', 9.99, 'USD') },
   { label: 'Purchase', id: 'purchase', fn: () => trackPurchase('Debug Plan', 'debug.product.id', 9.99, 'USD') },
   { label: 'mining_started', id: 'mining_started', fn: () => trackMiningStarted(100, TEST_USER_ID) },
-  { label: 'withdrawal_requested', id: 'withdrawal_requested', fn: () => trackWithdrawalRequested(0.0005, 'BTC', 'Lightning') },
+  { label: 'withdrawal_requested', id: 'withdrawal_requested', fn: () => trackWithdrawalRequested('Lightning', 0.0005, TEST_USER_ID) },
   { label: 'ad_failed_to_load', id: 'ad_failed_to_load', fn: () => trackAdFailedToLoad('debug-ad-unit', 'debug: no fill') },
   { label: 'notification_clicked', id: 'notification_clicked', fn: () => trackNotificationClicked('debug-notif-1', 'Debug title') },
 ];
@@ -60,7 +60,7 @@ export default function ApptroveDebugScreen() {
     setResults([]);
     for (const ev of EVENTS) {
       fire(ev);
-      await new Promise(r => setTimeout(r, 120)); // 120ms gap between events
+      await new Promise<void>(r => setTimeout(() => r(), 120)); // 120ms gap between events
     }
     setFiring(false);
     Alert.alert('Done', `${EVENTS.length} events fired. Check your Apptrove dashboard real-time stream.`);

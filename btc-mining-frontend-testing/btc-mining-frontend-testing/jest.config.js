@@ -14,7 +14,9 @@ module.exports = {
     '!src/**/*.d.ts',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|react-native-linear-gradient|@react-navigation|react-native-vector-icons|@react-native-clipboard)/)',
+    // @mmp/react-native is the vendored libs/mmp-react-native (ES modules). It
+    // must be transformed whether the install links it or copies it.
+    'node_modules/(?!(react-native|@react-native|react-native-linear-gradient|@react-navigation|react-native-vector-icons|@react-native-clipboard|@mmp)/)',
   ],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {

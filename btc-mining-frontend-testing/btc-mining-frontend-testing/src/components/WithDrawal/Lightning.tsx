@@ -47,7 +47,7 @@ const Lightning = ({
   maxBtc = 0.000009,
 }: {
   Collection_Wallet: WALLET_COLLECTION[];
-  amountInput: React.RefObject<TextInput>;
+  amountInput: React.RefObject<TextInput | null>;
   amount: string;
   setAmount: React.Dispatch<React.SetStateAction<string>>;
   selectedAddressLightning: 'Lightning Address' | 'Invoice';

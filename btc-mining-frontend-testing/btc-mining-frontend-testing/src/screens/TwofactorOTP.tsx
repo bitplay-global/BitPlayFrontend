@@ -58,7 +58,7 @@ const TwofactorOTP: React.FC<TwofactorOTPProps> = () => {
        // We'll pass this token to the ChangePassword screen
  
        // Simulate API delay
-       await new Promise(resolve => setTimeout(resolve, 1000));
+       await new Promise<void>(resolve => setTimeout(() => resolve(), 1000));
  
        navigation.replace('ReferralScreen', {
           token: token,
