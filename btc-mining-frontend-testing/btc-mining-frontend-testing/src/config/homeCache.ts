@@ -46,14 +46,6 @@ export type HomeCacheShape = {
   recentActivity: any[];
   privilegeMultiplier: number;
   dailyRewardClaimed: boolean;
-  dailyProgress: {
-    videosWatchedToday: number;
-    dailyTarget: number;
-    remaining: number;
-    isComplete: boolean;
-    hasActiveSubscription: boolean;
-    requirementActive: boolean;
-  } | null;
   lossTracking: HomeCacheLossTracking | null;
 };
 

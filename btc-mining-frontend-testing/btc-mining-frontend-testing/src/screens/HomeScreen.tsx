@@ -575,16 +575,6 @@ const Page: React.FC = () => {
 
   const [AndroidBTCBalString, SetAndroidBTCBalString] = useState('');
 
-  // Daily video requirement tracking (NEW)
-  const [dailyProgress, setDailyProgress] = useState(cachedHome?.dailyProgress ?? {
-    videosWatchedToday: 0,
-    dailyTarget: 10,
-    remaining: 10,
-    isComplete: false,
-    hasActiveSubscription: false,
-    requirementActive: false
-  });
-
   // Loss tracking states (will be updated from API)
   const [cumulativeLoss, setCumulativeLoss] = useState(cachedHome?.lossTracking?.cumulativeLoss ?? 0); // Cumulative loss percentage from API
   const [dailyLossOffset, setDailyLossOffset] = useState(cachedHome?.lossTracking?.dailyLossOffset ?? 3.0); // 3% daily loss offset (fixed)
@@ -924,33 +914,6 @@ const Page: React.FC = () => {
   // -----------------------------
 
   /**
-   * Increment daily video count when user watches ad
-   */
-  const incrementDailyVideoCount = async () => {
-    try {
-      const response = await fetch(`${get_data_uri('USERMININGDETAILS')}/increment-video`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user: user.id }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setDailyAdsWatched(data.daily_ads_watched);
-        setCumulativeLoss(data.cumulative_loss);
-
-        // ADD THIS: Show feedback when loss is reduced
-        if (data.loss_reduced) {
-          // Show toast/alert: "Great! Loss reduced by 3%"
-        }
-
-      }
-    } catch (err) {
-    }
-  };
-
-  /**
    * Increment loss offset ad count (for 30 ads requirement)
    */
   const incrementLossOffsetAd = async () => {
@@ -966,21 +929,6 @@ const Page: React.FC = () => {
       if (data.success) {
         setDailyAdsWatched(data.daily_ads_watched);
         setCumulativeLoss(data.cumulative_loss);
-      }
-    } catch (error) {
-    }
-  };
-
-  /**
-   * Fetch daily video progress
-   */
-  const fetchDailyProgress = async () => {
-    try {
-      const response = await fetch(`${get_data_uri('USERMININGDETAILS')}/daily-progress/${user.id}`);
-      const data = await response.json();
-
-      if (data.success) {
-        setDailyProgress(data.daily_progress);
       }
     } catch (error) {
     }
@@ -1111,7 +1059,6 @@ const Page: React.FC = () => {
     // Send only the increment (BASE_HASHPOWER_PER_AD) to backend
     await syncUserData(BASE_HASHPOWER_PER_AD, newAdsCount, true);
 
-    await incrementDailyVideoCount();
     // NEW: Increment daily ads watched for loss offset (only if user has purchased mining power)
     if (hashPower > 3) {
       await incrementLossOffsetAd();
@@ -1147,9 +1094,6 @@ const Page: React.FC = () => {
     // thirty_gh_rewarded_ads_watched counter. Send only the increment
     // (THREE_GH_REWARD) to backend.
     await syncUserData(THREE_GH_REWARD, newAdsCount, true, true);
-
-    // NEW: Increment daily video count for subscription holders
-    await incrementDailyVideoCount();
 
     // NEW: Increment daily ads watched for loss offset (only if user has purchased mining power)
     if (hashPower > 3) {
@@ -1359,13 +1303,6 @@ const Page: React.FC = () => {
 
           // Previous day earnings are now set from balance history fetch below
 
-          // NEW: Set daily progress if available
-          if (userData?.daily_progress) {
-            setDailyProgress(userData.daily_progress);
-          } else {
-            // Fallback: fetch separately if not included
-            await fetchDailyProgress();
-          }
 
           if (Array.isArray(txnsData?.transactions)) {
             setRecentActivity(txnsData.transactions);
@@ -1401,7 +1338,6 @@ const Page: React.FC = () => {
             recentActivity: Array.isArray(txnsData?.transactions) ? txnsData.transactions : recentActivity,
             privilegeMultiplier,
             dailyRewardClaimed: userData?.daily_reward_claimed ?? false,
-            dailyProgress: userData?.daily_progress ?? dailyProgress,
             lossTracking: userData?.mining_details?.lossTracking ? {
               cumulativeLoss: userData.mining_details.lossTracking.cumulative_loss ?? 0,
               dailyLossOffset: userData.mining_details.lossTracking.daily_loss_offset ?? 3.0,
@@ -2136,59 +2072,6 @@ const Page: React.FC = () => {
             </View>
           </View>
         )}
-
-        {/* NEW: Daily Video Requirement Progress (shown only for subscription holders) */}
-        {dailyProgress.requirementActive &&
-          dailyProgress.hasActiveSubscription && (
-            <View style={styles.dailyProgressSection}>
-              <View style={styles.dailyProgressHeader}>
-                <Icon name="video-check" size={18} color="#18D4F2" />
-                <Text style={styles.dailyProgressTitle}>
-                  Daily Video Requirement
-                </Text>
-              </View>
-
-              <View style={styles.progressBarContainer}>
-                <View style={styles.progressBarBackground}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      {
-                        width: `${(dailyProgress.videosWatchedToday /
-                          dailyProgress.dailyTarget) *
-                          100
-                          }%`,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.progressText}>
-                  {dailyProgress.videosWatchedToday}/{dailyProgress.dailyTarget}{' '}
-                  videos
-                </Text>
-              </View>
-
-              {!dailyProgress.isComplete && dailyProgress.remaining <= 3 && (
-                <View style={styles.warningBox}>
-                  <Icon name="alert-circle" size={16} color="#FBBF24" />
-                  <Text style={styles.warningText}>
-                    ⚠️ Watch {dailyProgress.remaining} more video
-                    {dailyProgress.remaining > 1 ? 's' : ''} to avoid 13%
-                    penalty!
-                  </Text>
-                </View>
-              )}
-
-              {dailyProgress.isComplete && (
-                <View style={styles.successBox}>
-                  <Icon name="check-circle" size={16} color="#10B981" />
-                  <Text style={styles.successText}>
-                    ✅ Daily requirement met!
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
 
         {/* Best Offer - Buy 1, Get 1 Free (premium / paid — shown near top for visibility) */}
         <View style={[styles.bestOfferBanner, { marginTop: 12 }]}>
@@ -4382,93 +4265,6 @@ const styles = StyleSheet.create({
 
   adsProgressIcon: {
     marginRight: 6,
-  },
-
-  // NEW: Daily Progress Styles
-  dailyProgressSection: {
-    backgroundColor: '#0B111D',
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 16,
-    // marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#232B3A',
-  },
-
-  dailyProgressHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-
-  dailyProgressTitle: {
-    color: '#F5F7FA',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-
-  progressBarContainer: {
-    marginBottom: 12,
-  },
-
-  progressBarBackground: {
-    width: '100%',
-    height: 8,
-    backgroundColor: '#232B3A',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#18D4F2',
-    borderRadius: 4,
-  },
-
-  progressText: {
-    color: '#7E8CA3',
-    fontSize: 14,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-
-  warningBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#FBBF24',
-  },
-
-  warningText: {
-    color: '#92400E',
-    fontSize: 13,
-    fontWeight: '600',
-    marginLeft: 8,
-    flex: 1,
-  },
-
-  successBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#D1FAE5',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#10B981',
-  },
-
-  successText: {
-    color: '#065F46',
-    fontSize: 13,
-    fontWeight: '600',
-    marginLeft: 8,
   },
 
   // // Notification Warning Banner

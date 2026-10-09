@@ -137,17 +137,6 @@ async function postClaimedHashpowerIncrement(
   return { effectiveHp, purchasedPh: Number.isNaN(purchasedPh) ? 0 : purchasedPh };
 }
 
-async function incrementDailyVideoForUser(userId: string): Promise<void> {
-  try {
-    await fetch(`${get_data_uri('USERMININGDETAILS')}/increment-video`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: userId }),
-    });
-  } catch {
-    /* non-blocking */
-  }
-}
 
 type SliceKind = 'gh' | 'try_again' | 'double';
 
@@ -326,7 +315,6 @@ const SpinAndWinScreen: React.FC = () => {
         addHashPower(gh);
       }
 
-      await incrementDailyVideoForUser(user.id);
       if (historyId) {
         await markSpinHistoryClaimedForUser(user.id, historyId);
         setSpinHistory(prev =>
