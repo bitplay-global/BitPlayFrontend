@@ -358,6 +358,8 @@ const WithdrawScreen = () => {
           notes.trim(),
         );
         if (data && !data.error) {
+          trackWithdrawalRequested('Lightning', amountBTC, String(user.id));
+          trackMmpWithdrawalRequested('Lightning', amountBTC, String(user.id));
           Alert.alert('Success', 'Withdrawal request created successfully!');
           navigation.goBack();
         } else if (data && data.error) {

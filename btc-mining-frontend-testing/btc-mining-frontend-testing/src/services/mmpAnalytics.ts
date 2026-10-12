@@ -20,9 +20,18 @@ import {
  * uses for its own (unrelated) event IDs.
  */
 const MMP_API_KEY = 'mmp_live_bHO3HI7zvAzG_gPxDGvTd8v2Btr5RaF0N7vo1N8NjBDCD8l2OuQmokY3';
-const MMP_ENDPOINT = 'https://mmp.adaptsmedia.info';
+const MMP_ENDPOINT = 'https://mmp.webflowby.online';
 
 let initialized = false;
+
+// The SDK drops (with a warning) any call made before initialize() starts, and
+// App.tsx starts it only after RevenueCat etc. finish -- while AuthProvider's
+// session restore and early screens fire on mount. Every call waits on this,
+// so early events are delayed rather than lost, and keep their order.
+let markReady: () => void = () => {};
+const ready = new Promise<void>((resolve) => {
+  markReady = resolve;
+});
 
 /** Call once at app startup, alongside Apptrove/RevenueCat init. Never throws. */
 export async function initializeMmp(): Promise<void> {
@@ -45,13 +54,17 @@ export async function initializeMmp(): Promise<void> {
     initialized = true;
   } catch (err) {
     if (__DEV__) console.warn('[MMP] initialize failed:', err);
+  } finally {
+    markReady();
   }
 }
 
 function safeTrack(name: string, options: Parameters<typeof MMP.track>[1] = {}): void {
-  MMP.track(name, options).catch((err) => {
-    if (__DEV__) console.warn(`[MMP] track "${name}" failed:`, err);
-  });
+  ready
+    .then(() => MMP.track(name, options))
+    .catch((err) => {
+      if (__DEV__) console.warn(`[MMP] track "${name}" failed:`, err);
+    });
 }
 
 /** Converts a decimal fiat price ("9.99") to integer minor units (999). */
@@ -60,7 +73,7 @@ function toMinorUnits(price: number): number {
 }
 
 export function setMmpUserId(userId: string | null): void {
-  MMP.setUserId(userId).catch(() => {});
+  ready.then(() => MMP.setUserId(userId)).catch(() => {});
 }
 
 /** Mirrors trackSignupCompleted. "signup" itself is reserved -- see file header. */

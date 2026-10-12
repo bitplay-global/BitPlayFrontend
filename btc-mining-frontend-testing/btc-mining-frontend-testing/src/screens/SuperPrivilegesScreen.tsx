@@ -37,6 +37,8 @@ import { getObjectFromStorage, saveObjectToStorage } from '../config/storage';
 import { useRewardedVideoAd } from '../services/googleAds';
 import { useHashPower } from '../stores/HashPowerStore';
 import { formatMiningLocalTimeForApi } from '../utils/miningTime';
+import { trackCheckoutStarted, trackPurchase } from '../services/apptroveAnalytics';
+import { trackMmpCheckoutStarted, trackMmpPurchase } from '../services/mmpAnalytics';
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -292,6 +294,11 @@ const SuperPrivilegesScreen: React.FC = () => {
   const handleClaim = async () => {
     if (!user?.id || !selectedProduct || selectedIsActive) return;
     setPurchasing(true);
+    // Super Privilege purchases sent no analytics at all, so this revenue
+    // never reached Apptrove or the MMP.
+    const planName = `Super Privilege ${selectedTierConfig.label}`;
+    trackCheckoutStarted(planName, selectedProduct.price, selectedProduct.currencyCode);
+    trackMmpCheckoutStarted(planName, selectedProduct.price, selectedProduct.currencyCode);
     try {
       const { customerInfo, productIdentifier } = await Purchases.purchaseStoreProduct(selectedProduct);
 
@@ -303,6 +310,10 @@ const SuperPrivilegesScreen: React.FC = () => {
         Alert.alert('Purchase Not Completed', 'Please try again.');
         return;
       }
+
+      // Tracked once the store confirms payment, before the backend call can fail.
+      trackPurchase(planName, productIdentifier, selectedProduct.price, selectedProduct.currencyCode);
+      trackMmpPurchase(planName, productIdentifier, selectedProduct.price, selectedProduct.currencyCode);
 
       const tierConfig = getTierByProductId(productIdentifier);
       const payload = {

@@ -508,6 +508,20 @@ const StoreScreen = () => {
         const introPrice = (selectedPlan.revenueCatPackage?.product as any)?.introPrice;
         if (introPrice && introPrice.price === 0) {
         }
+        // Tracked as soon as the store confirms payment, not after the backend
+        // sync: a paid purchase whose sync failed used to send no purchase event.
+        trackPurchase(
+          selectedPlan.name,
+          productIdentifier,
+          selectedPlan.revenueCatPackage?.product.price ?? 0,
+          selectedPlan.revenueCatPackage?.product.currencyCode ?? 'USD',
+        );
+        trackMmpPurchase(
+          selectedPlan.name,
+          productIdentifier,
+          selectedPlan.revenueCatPackage?.product.price ?? 0,
+          selectedPlan.revenueCatPackage?.product.currencyCode ?? 'USD',
+        );
         // Purchase successful - now sync with backend
         try {
           const payload = {
@@ -564,19 +578,6 @@ const StoreScreen = () => {
           } catch (fetchError) {
             // Continue even if fetch fails, we've already updated locally
           }
-
-          trackPurchase(
-            selectedPlan.name,
-            productIdentifier,
-            selectedPlan.revenueCatPackage?.product.price ?? 0,
-            selectedPlan.revenueCatPackage?.product.currencyCode ?? 'USD',
-          );
-          trackMmpPurchase(
-            selectedPlan.name,
-            productIdentifier,
-            selectedPlan.revenueCatPackage?.product.price ?? 0,
-            selectedPlan.revenueCatPackage?.product.currencyCode ?? 'USD',
-          );
 
           Alert.alert(
             'Purchase Successful',

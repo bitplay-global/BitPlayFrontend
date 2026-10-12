@@ -9,6 +9,19 @@ import {
 import appleAuth from '@invertase/react-native-apple-authentication';
 import { apiRequest, API_ENDPOINTS, setAuthExpiredHandler } from '../config/api';
 import { Alert } from 'react-native';
+import { trackLogin, trackSignupCompleted } from '../services/apptroveAnalytics';
+import { setMmpUserId, trackMmpLogin, trackMmpSignupCompleted } from '../services/mmpAnalytics';
+
+/** Google/Apple sign-in: the email screens track their own, these went untracked. */
+function trackSocialAuth(userId: string, method: 'google' | 'apple', isNewUser: boolean): void {
+  if (isNewUser) {
+    trackSignupCompleted(userId, method);
+    trackMmpSignupCompleted(userId, method);
+  } else {
+    trackLogin(userId, method);
+    trackMmpLogin(userId, method);
+  }
+}
 
 type AuthContextType = {
   authenticated: boolean;
@@ -38,6 +51,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setAuthenticated(!!token);
       setUser(userData);
       setLoading(false);
+      // Users already signed in when the MMP SDK was added never pass through
+      // a login screen, so their events stayed anonymous. The SDK only links
+      // the device (sends `login`) when the id actually changes.
+      if (token && userData?.id) setMmpUserId(String(userData.id));
     };
     checkSession();
   }, []);
@@ -74,6 +91,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       await clearSession();
       setAuthenticated(false);
       setUser(null);
+      // Otherwise the next account signed in on this device inherits this
+      // user's id for every event until its own login completes.
+      setMmpUserId(null);
     }
   };
 
@@ -166,6 +186,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // screen has no referral field, so a user invited by a friend who taps
       // "Login with Google" would otherwise be permanently unattributable --
       // callers use this to offer the referral prompt.
+      trackSocialAuth(String(mongoUserId), 'google', backendResponse.isNewUser === true);
       return { isNewUser: backendResponse.isNewUser === true };
     } catch (error: any) {
       console.error('Google login failed:', error);
@@ -272,6 +293,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log('MongoDB User ID:', mongoUserId);
       console.log('Apple User ID (for reference):', appleUserId || uid);
 
+      trackSocialAuth(String(mongoUserId), 'apple', backendResponse.isNewUser === true);
       return { isNewUser: backendResponse.isNewUser === true };
     } catch (error: any) {
       console.error('Apple login failed:', error);
