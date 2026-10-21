@@ -25,7 +25,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import BTCWithdrawal from '../components/WithDrawal/BTC';
 import Lightning from '../components/WithDrawal/Lightning';
 import { WALLET_COLLECTION } from '../types/wallet';
-import axios from 'axios';
+import { lightningAddressError, normalizeLightningAddress } from '../utils/lightningAddress';
 import LinearGradient from 'react-native-linear-gradient';
 import { getBtcUsdPriceCached } from '../services/btcPriceService';
 import {
@@ -69,16 +69,8 @@ const Collection_Wallet: WALLET_COLLECTION[] = [
     name: 'ZBD',
     icon: require('../assets/images/zbd.png'),
   },
-  {
-    id: 3,
-    name: 'Muun',
-    icon: require('../assets/images/muun.jpg'),
-  },
-  {
-    id: 4,
-    name: 'Bitrefill',
-    icon: require('../assets/images/bitrefill.png'),
-  },
+  // Muun and Bitrefill have no Lightning address (invoice-only), and
+  // invoices can't be used for withdrawals, so they are not offered.
   {
     id: 5,
     name: 'Others',
@@ -105,9 +97,6 @@ const WithdrawScreen = () => {
   const [currency, setCurrency] = useState(currencies[0]);
   const [notes, setNotes] = useState('');
   const [btcBal, setBtcBal] = useState('loading...');
-  const [selectedAddressLightning, setSelectedAddressLightning] = useState<
-    'Lightning Address' | 'Invoice'
-  >('Invoice');
   const amountInput = useRef<TextInput>(null);
   const [currencyDropdownVisible, setCurrencyDropdownVisible] = useState(false);
   const navigation = useNavigation<WithdrawalScreen>();
@@ -301,9 +290,7 @@ const WithdrawScreen = () => {
       const msg =
         method === 'BTC'
           ? 'Please enter a wallet address to continue'
-          : selectedAddressLightning === 'Invoice'
-            ? 'Please enter an invoice ID to continue'
-            : 'Please enter a Speed Wallet address to continue';
+          : 'Please enter your Lightning address to continue';
       Alert.alert(msg);
       return;
     }
@@ -339,32 +326,20 @@ const WithdrawScreen = () => {
         return;
       }
 
-      // --- Lightning Withdrawals ---
-      if (selectedAddressLightning === 'Invoice') {
-        const data = await handle_speed_withdraw(notes.trim());
-        if (data && !data.error) {
-          trackWithdrawalRequested('Lightning', amountBTC, String(user.id));
-          trackMmpWithdrawalRequested('Lightning', amountBTC, String(user.id));
-          Alert.alert('Success', 'Withdrawal request created successfully!');
-          navigation.goBack();
-        } else if (data && data.error) {
-          Alert.alert('Failed', data.error);
-        }
-      } else {
-        const data = await handle_speed_wallet(
-          amountUSD,
-          amountBTC,
-          user.id,
-          notes.trim(),
-        );
-        if (data && !data.error) {
-          trackWithdrawalRequested('Lightning', amountBTC, String(user.id));
-          trackMmpWithdrawalRequested('Lightning', amountBTC, String(user.id));
-          Alert.alert('Success', 'Withdrawal request created successfully!');
-          navigation.goBack();
-        } else if (data && data.error) {
-          Alert.alert('Failed', data.error);
-        }
+      // --- Lightning Withdrawals (to a Lightning address) ---
+      const data = await handle_speed_wallet(
+        amountUSD,
+        amountBTC,
+        user.id,
+        notes.trim(),
+      );
+      if (data && !data.error) {
+        trackWithdrawalRequested('Lightning', amountBTC, String(user.id));
+        trackMmpWithdrawalRequested('Lightning', amountBTC, String(user.id));
+        Alert.alert('Success', 'Withdrawal request created successfully!');
+        navigation.goBack();
+      } else if (data && data.error) {
+        Alert.alert('Failed', data.error);
       }
     } catch (err) {
       Alert.alert('Error', 'Something went wrong. Please try again.');
@@ -444,8 +419,6 @@ const WithdrawScreen = () => {
             amountInput={amountInput}
             amount={amount}
             setAmount={setAmount}
-            selectedAddressLightning={selectedAddressLightning}
-            setSelectedAddressLightning={setSelectedAddressLightning}
             belowMin={belowMin}
             exceedsBalance={exceedsBalance}
             setAddress={setNotes}
@@ -456,11 +429,6 @@ const WithdrawScreen = () => {
             selectedWalletName={selectedCollection.name}
             handleSelection={(collection: WALLET_COLLECTION) => {
               setSelectedCollection(collection);
-              // Only Speed supports a Lightning Address; every other wallet
-              // (ZBD, Muun, Others) is invoice-only for now.
-              if (collection.name !== 'Speed') {
-                setSelectedAddressLightning('Invoice');
-              }
             }}
             minBtc={MIN_WITHDRAW_BTC}
             maxBtc={MAX_WITHDRAW_BTC}
@@ -751,38 +719,6 @@ const styles = StyleSheet.create({
 
 // ================== Utility Functions (Commented) ==================
 
-async function handle_speed_withdraw(inv_id: any) {
-  try {
-    const speed_payment_uri = get_data_uri('PROCESS_SPEED_TRANSACTION');
-
-    const response = await fetch(speed_payment_uri, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getMobileSecurityHeaders(),
-      },
-      body: JSON.stringify({
-        invoice: inv_id,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return { error: data.error || data.message || 'Unable to process withdrawal.' };
-    }
-
-    return data;
-  } catch (error) {
-    Alert.alert('Error', 'Something went wrong while initiating Speed Wallet.');
-  }
-}
-
-function isValidSpeedLN(address: string) {
-  const regex = /^[a-zA-Z0-9_-]+@speed\.app$/;
-  return regex.test(address);
-}
-
 async function handle_speed_wallet(
   amountUSD: any,
   baseAmount: any,
@@ -792,12 +728,11 @@ async function handle_speed_wallet(
   try {
     const speed_wallet_uri = get_data_uri('CREATE_SPEED_TRANSACTION');
 
-    const new_speed_wallet = speed_wallet_address.toLowerCase();
+    const new_speed_wallet = normalizeLightningAddress(speed_wallet_address);
 
-    const is_speed_valid = isValidSpeedLN(new_speed_wallet);
-
-    if (!is_speed_valid) {
-      Alert.alert('Please enter a valid speed wallet address');
+    const addressError = lightningAddressError(new_speed_wallet);
+    if (addressError) {
+      Alert.alert('Check your address', addressError);
       return;
     }
 
