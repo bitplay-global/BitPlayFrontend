@@ -11,14 +11,15 @@ import {
 import React from 'react';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { WALLET_COLLECTION } from '../../types/wallet';
+import { invoiceAmountBtc } from '../../utils/lightningAddress';
 
-/** Example Lightning address for the selected wallet. Withdrawals are paid
- *  only to Lightning addresses: an invoice expires before a withdrawal is
- *  reviewed, so the app no longer offers that option. */
-const exampleAddressForWallet = (walletName: string): string => {
-  if (walletName === 'Speed') return 'e.g. yourname@speed.app';
-  if (walletName === 'ZBD') return 'e.g. yourname@zbd.gg';
-  return 'e.g. yourname@wallet.com';
+/** What to type for the selected wallet. One field takes either a
+ *  Lightning address or a Lightning invoice (see utils/lightningAddress). */
+const placeholderForWallet = (walletName: string): string => {
+  if (walletName === 'Speed') return 'yourname@speed.app or an invoice (lnbc…)';
+  if (walletName === 'ZBD') return 'yourname@zbd.gg or an invoice (lnbc…)';
+  if (walletName === 'Muun' || walletName === 'Bitrefill') return 'Paste your Lightning invoice (lnbc…)';
+  return 'Lightning address or invoice (lnbc…)';
 };
 
 // Fixed card sizing so snapToInterval below has a constant pixel stride to
@@ -169,20 +170,25 @@ const Lightning = ({
         </Text>
       )}
 
-      {/* ===== Lightning Address ===== */}
-      <Text style={styles.label}>Lightning Address</Text>
+      {/* ===== Lightning Address or Invoice ===== */}
+      <Text style={styles.label}>Lightning address or invoice</Text>
       <TextInput
         value={address}
-        onChangeText={setAddress}
+        onChangeText={(text) => {
+          setAddress(text);
+          // An invoice is for a fixed amount: use it as the withdrawal amount.
+          const invoiceBtc = invoiceAmountBtc(text);
+          if (invoiceBtc) setAmount(invoiceBtc);
+        }}
         style={styles.input}
-        placeholder={exampleAddressForWallet(selectedWalletName)}
+        placeholder={placeholderForWallet(selectedWalletName)}
         placeholderTextColor="#94A3B8"
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="email-address"
       />
       <Text style={styles.hintText}>
-        Find it in your wallet under Receive → Lightning address. Invoices (lnbc…) are not accepted.
+        A Lightning address (Receive → Lightning address) works every time. An invoice must be for the exact amount, and expires: if it expires before your withdrawal is approved, you'll need to request again.
       </Text>
     </View>
   );

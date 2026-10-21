@@ -25,7 +25,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import BTCWithdrawal from '../components/WithDrawal/BTC';
 import Lightning from '../components/WithDrawal/Lightning';
 import { WALLET_COLLECTION } from '../types/wallet';
-import { lightningAddressError, normalizeLightningAddress } from '../utils/lightningAddress';
+import { lightningAddressError, normalizeDestination } from '../utils/lightningAddress';
 import LinearGradient from 'react-native-linear-gradient';
 import { getBtcUsdPriceCached } from '../services/btcPriceService';
 import {
@@ -69,8 +69,18 @@ const Collection_Wallet: WALLET_COLLECTION[] = [
     name: 'ZBD',
     icon: require('../assets/images/zbd.png'),
   },
-  // Muun and Bitrefill have no Lightning address (invoice-only), and
-  // invoices can't be used for withdrawals, so they are not offered.
+  // Muun and Bitrefill have no Lightning address: their users paste an
+  // invoice into the same field.
+  {
+    id: 3,
+    name: 'Muun',
+    icon: require('../assets/images/muun.jpg'),
+  },
+  {
+    id: 4,
+    name: 'Bitrefill',
+    icon: require('../assets/images/bitrefill.png'),
+  },
   {
     id: 5,
     name: 'Others',
@@ -290,7 +300,7 @@ const WithdrawScreen = () => {
       const msg =
         method === 'BTC'
           ? 'Please enter a wallet address to continue'
-          : 'Please enter your Lightning address to continue';
+          : 'Please enter your Lightning address or invoice to continue';
       Alert.alert(msg);
       return;
     }
@@ -326,7 +336,7 @@ const WithdrawScreen = () => {
         return;
       }
 
-      // --- Lightning Withdrawals (to a Lightning address) ---
+      // --- Lightning Withdrawals (to a Lightning address or invoice) ---
       const data = await handle_speed_wallet(
         amountUSD,
         amountBTC,
@@ -728,7 +738,7 @@ async function handle_speed_wallet(
   try {
     const speed_wallet_uri = get_data_uri('CREATE_SPEED_TRANSACTION');
 
-    const new_speed_wallet = normalizeLightningAddress(speed_wallet_address);
+    const new_speed_wallet = normalizeDestination(speed_wallet_address);
 
     const addressError = lightningAddressError(new_speed_wallet);
     if (addressError) {
