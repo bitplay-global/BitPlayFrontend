@@ -81,7 +81,8 @@ jobs:
       # github.run_number increases by one per run of this workflow and is not
       # reset by re-runs, which gives the strictly-increasing sequence Play
       # Console requires. BASE offsets it past the codes already published by
-      # hand (259/260); raise the ANDROID_VERSION_CODE_BASE repo variable if the
+      # hand (production was at 430 on 2026-10-21, published from the old
+      # repo); raise the ANDROID_VERSION_CODE_BASE repo variable if the
       # run counter is ever reset (e.g. the workflow file is renamed) so the
       # sequence cannot go backwards.
       #
@@ -97,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           FILE_CODE=$(grep -m1 'versionCode' build.gradle | tr -dc '0-9')
-          BASE="${ANDROID_VERSION_CODE_BASE:-260}"
+          BASE="${ANDROID_VERSION_CODE_BASE:-430}"
           CANDIDATE=$(( BASE + ${{ github.run_number }} ))
           if [ "$CANDIDATE" -le "$FILE_CODE" ]; then
             CANDIDATE=$(( FILE_CODE + 1 ))
