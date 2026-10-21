@@ -11,14 +11,16 @@ import {
 import React from 'react';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { WALLET_COLLECTION } from '../../types/wallet';
-import RadioButton from './RadioButton';
+import { invoiceAmountBtc } from '../../utils/lightningAddress';
 
-/** Only Speed supports a Lightning Address today; every other wallet
- *  (ZBD, Muun, Others) can only be paid via a pasted invoice. */
-const radioOptionsForWallet = (
-  walletName: string,
-): ('Lightning Address' | 'Invoice')[] =>
-  walletName === 'Speed' ? ['Lightning Address', 'Invoice'] : ['Invoice'];
+/** What to type for the selected wallet. One field takes either a
+ *  Lightning address or a Lightning invoice (see utils/lightningAddress). */
+const placeholderForWallet = (walletName: string): string => {
+  if (walletName === 'Speed') return 'yourname@speed.app or an invoice (lnbc…)';
+  if (walletName === 'ZBD') return 'yourname@zbd.gg or an invoice (lnbc…)';
+  if (walletName === 'Muun' || walletName === 'Bitrefill') return 'Paste your Lightning invoice (lnbc…)';
+  return 'Lightning address or invoice (lnbc…)';
+};
 
 // Fixed card sizing so snapToInterval below has a constant pixel stride to
 // snap to -- an auto-sized (content-driven) card width can't be used with
@@ -28,7 +30,7 @@ const WALLET_CARD_GAP = 8;
 const WALLET_CARD_STRIDE = WALLET_CARD_WIDTH + WALLET_CARD_GAP;
 
 const Lightning = ({
-  btcBal,
+  btcBal: _btcBal,
   maxWithdrawable,
   address,
   setAddress,
@@ -41,8 +43,6 @@ const Lightning = ({
   handleSelection,
   selectedCollection,
   selectedWalletName,
-  selectedAddressLightning,
-  setSelectedAddressLightning,
   minBtc = 0.0000005,
   maxBtc = 0.000009,
 }: {
@@ -50,10 +50,6 @@ const Lightning = ({
   amountInput: React.RefObject<TextInput | null>;
   amount: string;
   setAmount: React.Dispatch<React.SetStateAction<string>>;
-  selectedAddressLightning: 'Lightning Address' | 'Invoice';
-  setSelectedAddressLightning: React.Dispatch<
-    React.SetStateAction<'Lightning Address' | 'Invoice'>
-  >;
   belowMin: boolean;
   exceedsBalance: boolean;
   setAddress: React.Dispatch<React.SetStateAction<string>>;
@@ -66,7 +62,6 @@ const Lightning = ({
   minBtc?: number;
   maxBtc?: number;
 }) => {
-  const radioOptions = radioOptionsForWallet(selectedWalletName);
   return (
     <View style={styles.box}>
       {/* ===== Wallet Selector ===== */}
@@ -175,35 +170,26 @@ const Lightning = ({
         </Text>
       )}
 
-      {/* ===== Lightning Address / Invoice Selection ===== */}
-      {/* Only shown when the selected wallet actually offers a choice — Speed
-          is the only one with both options; everyone else is invoice-only,
-          so there's nothing to pick and the row would just be noise. */}
-      {radioOptions.length > 1 && (
-        <View style={styles.radioRow}>
-          {radioOptions.map(option => (
-            <RadioButton
-              key={option}
-              label={option}
-              selected={selectedAddressLightning === option}
-              size={18}
-              onPress={() => setSelectedAddressLightning(option)}
-            />
-          ))}
-        </View>
-      )}
-
+      {/* ===== Lightning Address or Invoice ===== */}
+      <Text style={styles.label}>Lightning address or invoice</Text>
       <TextInput
         value={address}
-        onChangeText={setAddress}
+        onChangeText={(text) => {
+          setAddress(text);
+          // An invoice is for a fixed amount: use it as the withdrawal amount.
+          const invoiceBtc = invoiceAmountBtc(text);
+          if (invoiceBtc) setAmount(invoiceBtc);
+        }}
         style={styles.input}
-        placeholder={
-          selectedAddressLightning === 'Lightning Address'
-            ? 'e.g. miningspeed@speed.app'
-            : 'Paste your invoice'
-        }
+        placeholder={placeholderForWallet(selectedWalletName)}
         placeholderTextColor="#94A3B8"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
       />
+      <Text style={styles.hintText}>
+        A Lightning address (Receive → Lightning address) works every time. An invoice must be for the exact amount, and expires: if it expires before your withdrawal is approved, you'll need to request again.
+      </Text>
     </View>
   );
 };
@@ -336,10 +322,11 @@ const styles = StyleSheet.create({
   },
 
   // ===== Lightning Address Input =====
-  radioRow: {
-    flexDirection: 'row',
-    gap: 15,
-    marginTop: 5,
+  hintText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    marginTop: -16,
+    marginBottom: 16,
   },
   input: {
     backgroundColor: '#334155',
