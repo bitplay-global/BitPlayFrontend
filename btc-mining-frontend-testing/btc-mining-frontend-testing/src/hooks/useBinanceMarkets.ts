@@ -1,11 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-const BINANCE_WS =
-  'wss://stream.binance.com:9443/stream?streams=btcusdt@trade/btcusdt@kline_1m';
-const KLINES_REST =
-  'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=120';
-const KLINES_1S_REST =
-  'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1s&limit=900';
+// Binance's public market-data mirrors (binance.vision) come first: the main
+// api.binance.com / stream.binance.com hosts are blocked in India -- where most
+// users are -- and the US, which left the chart on "Loading chart data…" for
+// ever. Same API, same messages; the main hosts stay as fallbacks.
+const STREAMS = 'streams=btcusdt@trade/btcusdt@kline_1m';
+const WS_URLS = [
+  `wss://data-stream.binance.vision/stream?${STREAMS}`,
+  `wss://stream.binance.com:9443/stream?${STREAMS}`,
+];
+export const BINANCE_REST_BASES = ['https://data-api.binance.vision', 'https://api.binance.com'];
+const KLINES_PATH = '/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=120';
+const KLINES_1S_PATH = '/api/v3/klines?symbol=BTCUSDT&interval=1s&limit=900';
+const REST_TIMEOUT_MS = 6000;
+
+/** GET JSON from the first Binance host that answers within the timeout. */
+export async function fetchBinanceJson<T = unknown>(path: string): Promise<T> {
+  let lastErr: unknown = null;
+  for (const base of BINANCE_REST_BASES) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REST_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${base}${path}`, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return (await res.json()) as T;
+    } catch (e) {
+      lastErr = e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr ?? new Error('Binance unreachable');
+}
 
 export type TCandle = {
   timestamp: number;
@@ -148,11 +174,10 @@ export function useBinanceMarkets() {
     let cancelled = false;
     (async () => {
       try {
-        const [res1m, res1s] = await Promise.all([
-          fetch(KLINES_REST),
-          fetch(KLINES_1S_REST).catch(() => null),
+        const [json1m, json1s] = await Promise.all([
+          fetchBinanceJson<(string | number)[][]>(KLINES_PATH),
+          fetchBinanceJson<(string | number)[][]>(KLINES_1S_PATH).catch(() => null),
         ]);
-        const json1m = (await res1m.json()) as (string | number)[][];
         if (cancelled || !Array.isArray(json1m)) return;
         const mapped = json1m.map(mapKlineRow).slice(-MAX_CANDLES);
         setRows(mapped);
@@ -162,9 +187,8 @@ export function useBinanceMarkets() {
           value: r.candle.close,
         }));
 
-        if (res1s) {
+        if (json1s) {
           try {
-            const json1s = (await res1s.json()) as (string | number)[][];
             if (Array.isArray(json1s) && json1s.length > 0) {
               const secPoints: LinePoint[] = json1s.map((row) => ({
                 timestamp: Number(row[0]),
@@ -194,14 +218,24 @@ export function useBinanceMarkets() {
   useEffect(() => {
     let ws: WebSocket;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
+    // Set on unmount: the socket's onclose used to schedule a reconnect even
+    // after the screen was left, so the stream kept reopening in the background.
+    let stopped = false;
+    let urlIdx = 0;
+    let gotMessage = false;
 
     const connect = () => {
-      ws = new WebSocket(BINANCE_WS);
+      if (stopped) return;
+      gotMessage = false;
+      ws = new WebSocket(WS_URLS[urlIdx % WS_URLS.length]);
       wsRef.current = ws;
 
       ws.onopen = () => setConnected(true);
       ws.onclose = () => {
         setConnected(false);
+        if (stopped) return;
+        // A host that never delivered a message is likely blocked: try the next.
+        if (!gotMessage) urlIdx += 1;
         reconnect = setTimeout(connect, 3000);
       };
       ws.onerror = () => {
@@ -213,6 +247,7 @@ export function useBinanceMarkets() {
       };
 
       ws.onmessage = (ev) => {
+        gotMessage = true;
         try {
           const msg = JSON.parse(ev.data as string) as BinanceTradeMsg &
             BinanceKlineMsg;
@@ -255,6 +290,7 @@ export function useBinanceMarkets() {
 
     connect();
     return () => {
+      stopped = true;
       if (reconnect) clearTimeout(reconnect);
       if (priceFlushRef.current) clearTimeout(priceFlushRef.current);
       if (lineFlushRef.current) clearTimeout(lineFlushRef.current);

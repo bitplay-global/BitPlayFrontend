@@ -114,7 +114,7 @@ const MakePaymentScreen = ({ navigation, route }: any) => {
 
         try {
           // Binance fallback
-          const res = await axios.get("https://api.binance.com/api/v3/ticker/price", {
+          const res = await axios.get("https://data-api.binance.vision/api/v3/ticker/price", {
             params: { symbol: "BTCUSDT" },
           });
           return parseFloat(res.data.price);

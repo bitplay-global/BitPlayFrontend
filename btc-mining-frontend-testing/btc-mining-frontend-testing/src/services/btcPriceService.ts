@@ -15,7 +15,7 @@ async function fetchFromCoinGecko(): Promise<number> {
 
 async function fetchFromBinance(): Promise<number> {
   // Public endpoint (no API key)
-  const res = await axios.get('https://api.binance.com/api/v3/ticker/price', {
+  const res = await axios.get('https://data-api.binance.vision/api/v3/ticker/price', {
     params: { symbol: 'BTCUSDT' },
   });
   const price = Number(res?.data?.price);
