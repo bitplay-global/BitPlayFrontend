@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Alert, ActivityIndicator,
   Dimensions,
 } from 'react-native';
+import { isLuckyRound, noteWin } from '../services/gameRetryCredits';
 import { useFreeRetries } from '../hooks/useFreeRetries';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -56,7 +57,9 @@ function pickWeightedGh(): number {
 
 function dealBoard(): Tile[] {
   const bombIdx = new Set<number>();
-  while (bombIdx.size < BOMB_COUNT) {
+  // Lucky round (services/gameRetryCredits.ts): one bomb fewer.
+  const bombs = isLuckyRound('Tap to Bomb') ? Math.max(1, BOMB_COUNT - 1) : BOMB_COUNT;
+  while (bombIdx.size < bombs) {
     bombIdx.add(Math.floor(Math.random() * GRID_SIZE));
   }
   return Array.from({ length: GRID_SIZE }, (_, i) =>
@@ -211,6 +214,7 @@ export default function TapToBombScreen() {
       setRevealedIndices(new Set(board.map((_, i) => i)));
       if (tile.kind === 'safe') {
         pendingWinGh.current = tile.gh;
+        noteWin('Tap to Bomb');
         setPhase('revealed_win');
       } else {
         setPhase('revealed_lose');
@@ -235,7 +239,7 @@ export default function TapToBombScreen() {
       await fetch(get_data_uri('USERMININGDETAILS'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id, hashpower: gh, offset: new Date().getTimezoneOffset() }),
+        body: JSON.stringify({ user_id: user.id, hashpower: gh, offset: new Date().getTimezoneOffset(), game: 'Tap to Bomb' }),
       });
     } catch {
       // Local credit above already stands; the backend record is best-effort.

@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Alert, ActivityIndicator,
   PanResponder, Dimensions, GestureResponderEvent,
 } from 'react-native';
+import { luckyRoll, noteWin } from '../services/gameRetryCredits';
 import { useFreeRetries } from '../hooks/useFreeRetries';
 import GameRulesNote from '../components/GameRulesNote';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -115,7 +116,7 @@ export default function ScratchAndWinScreen() {
   useEffect(() => { currentOutcomeRef.current = currentOutcome; }, [currentOutcome]);
 
   const dealNewCard = useCallback(() => {
-    setCurrentOutcome(pickWeightedOutcome());
+    setCurrentOutcome(luckyRoll('Scratch & Win', pickWeightedOutcome, o => o.gh <= 0));
     setPhase('ready');
     setPaths([]);
     scratchedLenRef.current = 0;
@@ -138,6 +139,7 @@ export default function ScratchAndWinScreen() {
     Animated.timing(foilOpacity, { toValue: 0, duration: 350, useNativeDriver: true }).start(() => {
       if (outcome.gh > 0) {
         pendingWinGh.current = outcome.gh;
+        noteWin('Scratch & Win');
         setPhase('revealed_win');
       } else {
         setPhase('revealed_lose');
@@ -198,7 +200,7 @@ export default function ScratchAndWinScreen() {
       await fetch(get_data_uri('USERMININGDETAILS'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id, hashpower: gh, offset: new Date().getTimezoneOffset() }),
+        body: JSON.stringify({ user_id: user.id, hashpower: gh, offset: new Date().getTimezoneOffset(), game: 'Scratch & Win' }),
       });
     } catch {
       // Local credit above already stands; the backend record is best-effort.

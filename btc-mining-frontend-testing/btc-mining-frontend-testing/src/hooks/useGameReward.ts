@@ -6,7 +6,7 @@ import { useHashPower } from '../stores/HashPowerStore';
 import { useAdConfig } from '../providers/AdConfigProvider';
 import { useRewardedVideoAd } from '../services/googleAds';
 import { get_data_uri } from '../config/api';
-import { freeRetriesLeft, takeFreeRetry, resetFreeRetries } from '../services/gameRetryCredits';
+import { freeRetriesLeft, takeFreeRetry, resetFreeRetries, noteLoss, noteWin } from '../services/gameRetryCredits';
 
 /**
  * The ad-gated reward flow every mini-game shares.
@@ -74,7 +74,7 @@ export function useGameReward({
   const retryEarnedRef = useRef(false);
 
   /** Arm a win so the claim button can redeem it. */
-  const setPendingWin = useCallback((gh: number) => { pendingWinGh.current = gh; }, []);
+  const setPendingWin = useCallback((gh: number) => { pendingWinGh.current = gh; noteWin(retryKey); }, [retryKey]);
   /** Clear reward state when the game deals a fresh round. */
   const resetReward = useCallback(() => {
     pendingWinGh.current = null;
@@ -96,6 +96,8 @@ export function useGameReward({
           user_id: user.id,
           hashpower: gh,
           offset: new Date().getTimezoneOffset(),
+          // Labels this as a game win for the game streak and leaderboard.
+          game: retryKey,
         }),
       });
     } catch {
@@ -103,7 +105,7 @@ export function useGameReward({
     }
     setCrediting(false);
     setClaimedBanner(`+${gh} GH/s is now in your mining power.`);
-  }, [user?.id, addHashPower]);
+  }, [user?.id, addHashPower, retryKey]);
 
   const onClaimAdClosed = useCallback(() => {
     if (claimEarnedRef.current) {
@@ -151,6 +153,7 @@ export function useGameReward({
   }, [claimAdLoaded, showClaimAd]);
 
   const openRetryAd = useCallback(() => {
+    noteLoss(retryKey);
     if (takeFreeRetry(retryKey, freeRetries)) {
       refreshRetriesLeft();
       onNewRound();

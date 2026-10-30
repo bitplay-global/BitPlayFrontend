@@ -16,6 +16,7 @@ import {
   Image,
   Linking,
 } from 'react-native';
+import { luckyRoll, noteWin, isLuckyRound } from '../services/gameRetryCredits';
 import { useFreeRetries } from '../hooks/useFreeRetries';
 import GameRulesNote from '../components/GameRulesNote';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -115,6 +116,7 @@ async function postClaimedHashpowerIncrement(
     user_id: userId,
     hashpower: incrementGh,
     offset,
+    game: 'Spin & Win', // counts for the game streak and leaderboard
   };
   if (timezone) {
     body.timezone = timezone;
@@ -361,7 +363,7 @@ const SpinAndWinScreen: React.FC = () => {
       setWinnerIndex(null);
       setRewardPill('Spin to win');
       setRewardAmountLine('—');
-      setBanner('Video complete — spin again!');
+      setBanner(isLuckyRound('Spin & Win') ? 'Video complete — lucky spin, better odds!' : 'Video complete — spin again!');
     } else {
       Alert.alert('Ad not completed', 'Please watch the full video to spin again.');
     }
@@ -441,7 +443,7 @@ const SpinAndWinScreen: React.FC = () => {
     }
     if (phase !== 'idle') return;
 
-    const winnerIdx = pickWeightedIndex();
+    const winnerIdx = luckyRoll('Spin & Win', pickWeightedIndex, i => SLICES[i].kind === 'try_again');
     const centerPhi = winnerIdx * segmentAngle;
     const fullTurns = 7;
     const currentVisual = rotationRef.current % 360;
@@ -494,6 +496,7 @@ const SpinAndWinScreen: React.FC = () => {
         }
       } else {
         pendingWinGh.current = slice.gh;
+        noteWin('Spin & Win');
         pendingHistoryId.current = historyId;
         setWonGh(slice.gh);
         setPhase('won_pending');
@@ -532,7 +535,7 @@ const SpinAndWinScreen: React.FC = () => {
       setWinnerIndex(null);
       setRewardPill('Spin to win');
       setRewardAmountLine('—');
-      setBanner(null);
+      setBanner(isLuckyRound('Spin & Win') ? 'Lucky spin — better odds this time!' : null);
       return;
     }
     if (!retryAdLoaded) {

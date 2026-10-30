@@ -17,6 +17,7 @@ import { BannerAdSlot } from '../components/ads/BannerAdSlot';
 import { BannerAdSize } from 'react-native-google-mobile-ads';
 import { DEFAULT_ADMOB_BANNER_ID } from '../services/adUnitDefaults';
 import { useAdConfig } from '../providers/AdConfigProvider';
+import GameEngagementCard from '../components/games/GameEngagementCard';
 import { WIN_GH_REWARD as TRADING_WIN_GH } from './TradingScreen';
 import { WIN_REWARD_GH as MEMORY_WIN_GH } from './MemoryCardMatchScreen';
 import { SLICES as SPIN_SLICES } from './SpinAndWinScreen';
@@ -287,6 +288,9 @@ export default function GameZoneScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: bottomBarHeight + SPACING.lg }}
         >
+
+          {/* Game streak + weekly leaderboard */}
+          <GameEngagementCard />
 
           {/* Hot / Popular section */}
           {(loading || popular.length > 0) && (

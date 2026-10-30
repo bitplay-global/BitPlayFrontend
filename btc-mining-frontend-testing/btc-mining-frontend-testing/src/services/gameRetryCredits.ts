@@ -45,6 +45,51 @@ export function takeFreeRetry(game: string, free?: number | null): boolean {
   return true;
 }
 
+// --- Lucky round ---------------------------------------------------------
+// After LUCKY_AFTER_LOSSES losses in a row in a chance game, the next round
+// has better odds: a losing roll is rolled once more (a 55% loss chance
+// becomes about 30%). Prize amounts never change, and the backend's game
+// limits still apply. Counted per game; a win clears it.
+
+export const LUCKY_AFTER_LOSSES = 2;
+/** Games whose odds a lucky round improves (they call luckyRoll / isLuckyRound). */
+export const LUCKY_GAMES = new Set(['Spin & Win', 'Scratch & Win', 'Lucky Dice', 'Slot Machine', 'Rock Paper Scissors', 'Tap to Bomb']);
+const LOSS_KEY = 'gameLossStreak:v1';
+
+function lossCounts(): Counts {
+  const v = getObjectFromStorage(LOSS_KEY);
+  return v && typeof v === 'object' ? (v as Counts) : {};
+}
+
+/** A round in this game was lost. */
+export function noteLoss(game: string): void {
+  const c = lossCounts();
+  c[game] = Math.min((c[game] || 0) + 1, 99);
+  saveObjectToStorage(LOSS_KEY, c);
+}
+
+/** A round in this game was won: the loss run ends. */
+export function noteWin(game: string): void {
+  const c = lossCounts();
+  if (!c[game]) return;
+  delete c[game];
+  saveObjectToStorage(LOSS_KEY, c);
+}
+
+/** True when the next round in this game is a lucky round. */
+export function isLuckyRound(game: string): boolean {
+  return (lossCounts()[game] || 0) >= LUCKY_AFTER_LOSSES;
+}
+
+/**
+ * Rolls an outcome; on a lucky round a losing outcome is rolled once more.
+ * `roll` must be the game's normal random roll, `isLoss` its loss test.
+ */
+export function luckyRoll<T>(game: string, roll: () => T, isLoss: (t: T) => boolean): T {
+  const first = roll();
+  return isLoss(first) && isLuckyRound(game) ? roll() : first;
+}
+
 /** A video was watched in this game: the free retries start again. */
 export function resetFreeRetries(game: string): void {
   const counts = load();

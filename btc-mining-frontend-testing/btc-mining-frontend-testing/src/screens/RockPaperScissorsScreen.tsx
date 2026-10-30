@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { luckyRoll } from '../services/gameRetryCredits';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import GameScreenWrapper from '../components/GameScreenWrapper';
@@ -54,7 +55,7 @@ export default function RockPaperScissorsScreen() {
 
   const play = (move: Move) => {
     if (phase !== 'ready') return;
-    const house = MOVES[Math.floor(Math.random() * MOVES.length)].key;
+    const house = luckyRoll('Rock Paper Scissors', () => MOVES[Math.floor(Math.random() * MOVES.length)].key, h => BEATS[h] === move);
     setPlayerMove(move);
     setHouseMove(house);
 

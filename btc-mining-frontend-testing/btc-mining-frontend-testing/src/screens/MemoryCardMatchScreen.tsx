@@ -12,6 +12,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { get_data_uri } from '../config/api';
 import { useRewardedVideoAd } from '../services/googleAds';
 import { useFreeRetries } from '../hooks/useFreeRetries';
+import { noteWin } from '../services/gameRetryCredits';
 import { useAdConfig } from '../providers/AdConfigProvider';
 import { BannerAdWithGamFallback } from '../components/ads/BannerAdWithGamFallback';
 import { BannerAdSize } from 'react-native-google-mobile-ads';
@@ -170,6 +171,7 @@ export default function MemoryCardMatchScreen() {
     if (!active || memorize) return;
     if (matchedCount === cards.length) {
       clearTimer(); setActive(false); setWon(timer > 0);
+      if (timer > 0) noteWin('Memory Match');
     }
   }, [cards]);
 
@@ -210,7 +212,7 @@ export default function MemoryCardMatchScreen() {
       const res = await fetch(get_data_uri('USERMININGDETAILS'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user?.id, hashpower: WIN_REWARD_GH, offset: new Date().getTimezoneOffset() }),
+        body: JSON.stringify({ user_id: user?.id, hashpower: WIN_REWARD_GH, offset: new Date().getTimezoneOffset(), game: 'Memory Match' }),
       });
       const data = await res.json().catch(() => null);
       if (data?.success && data?.mining_details) {

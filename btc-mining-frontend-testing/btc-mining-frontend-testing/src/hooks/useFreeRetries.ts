@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAdConfig } from '../providers/AdConfigProvider';
-import { freeRetriesLeft, takeFreeRetry, resetFreeRetries } from '../services/gameRetryCredits';
+import { freeRetriesLeft, takeFreeRetry, resetFreeRetries, noteLoss, noteWin } from '../services/gameRetryCredits';
 
 /**
  * Free retries after a loss, for the games that run their own retry video
@@ -16,6 +16,7 @@ export function useFreeRetries(game: string) {
 
   /** Uses a free retry if one is left; true means start the new round now, no video. */
   const tryFree = useCallback(() => {
+    noteLoss(game);
     const used = takeFreeRetry(game, free);
     refresh();
     return used;
@@ -27,5 +28,8 @@ export function useFreeRetries(game: string) {
     refresh();
   }, [game, refresh]);
 
-  return { left, tryFree, reset };
+  /** Call when a round is won (ends the loss run for the lucky round). */
+  const won = useCallback(() => noteWin(game), [game]);
+
+  return { left, tryFree, reset, won };
 }

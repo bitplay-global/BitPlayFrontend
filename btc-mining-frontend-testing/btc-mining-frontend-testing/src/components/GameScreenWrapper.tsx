@@ -11,6 +11,7 @@ import { BannerAdSlot } from './ads/BannerAdSlot';
 import { BannerAdSize } from 'react-native-google-mobile-ads';
 import { DEFAULT_ADMOB_BANNER_ID } from '../services/adUnitDefaults';
 import { useAdConfig } from '../providers/AdConfigProvider';
+import { isLuckyRound, LUCKY_GAMES } from '../services/gameRetryCredits';
 
 interface Props {
   title: string;
@@ -69,6 +70,16 @@ export default function GameScreenWrapper({
         {BANNER_ADS_ENABLED && (
           <View style={styles.topBannerWrap}>
             <BannerAdSlot unitId={bannerUnitId} size={BannerAdSize.BANNER} />
+          </View>
+        )}
+
+        {/* Lucky round (services/gameRetryCredits.ts): re-read on every render,
+            so it appears once a second loss in a row is recorded and goes once
+            the player wins. */}
+        {LUCKY_GAMES.has(title) && isLuckyRound(title) && (
+          <View style={styles.luckyBadge}>
+            <MaterialCommunityIcons name="clover" size={15} color="#4ADE80" />
+            <Text style={styles.luckyText}>Lucky round — better odds this time!</Text>
           </View>
         )}
 
@@ -132,6 +143,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
+  luckyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(34,197,94,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(74,222,128,0.4)',
+  },
+  luckyText: { color: '#BBF7D0', fontSize: 12.5, fontWeight: '700' },
   titleWrap: {
     flex: 1,
     flexDirection: 'row',
