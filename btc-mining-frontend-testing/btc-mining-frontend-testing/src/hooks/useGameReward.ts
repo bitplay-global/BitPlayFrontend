@@ -6,6 +6,7 @@ import { useHashPower } from '../stores/HashPowerStore';
 import { useAdConfig } from '../providers/AdConfigProvider';
 import { useRewardedVideoAd } from '../services/googleAds';
 import { get_data_uri } from '../config/api';
+import { freeRetriesLeft, takeFreeRetry, resetFreeRetries, noteLoss, noteWin } from '../services/gameRetryCredits';
 
 /**
  * The ad-gated reward flow every mini-game shares.
@@ -18,6 +19,9 @@ import { get_data_uri } from '../config/api';
  *    consumed on close -- a skipped ad grants nothing.
  *  - `pendingWinGh` is nulled only once the reward actually fires, so a skipped
  *    claim ad neither pays out nor silently discards a still-valid win.
+ *  - A loss retries for free a few times before it needs a video
+ *    (services/gameRetryCredits.ts); any video watched here starts the free
+ *    retries again. Wins always need the claim video, as before.
  *  - Credit goes to HashPowerStore immediately so Home reflects it at once; the
  *    backend POST is a best-effort record and its response is deliberately NOT
  *    used to overwrite hashPower (a read-after-write that hasn't caught up
@@ -29,9 +33,10 @@ export function useGameReward({
 }: {
   /** Called after a successful claim or a successful ad-gated retry. Must be stable. */
   onNewRound: () => void;
-  /** Used only in the "still loading" copy. */
+  /** Names the game: the "still loading" copy and the free-retry count. */
   gameName?: string;
 }) {
+  const retryKey = gameName || 'game';
   const { user } = useAuth();
   const { addHashPower, isMiningActive: storeMiningActive } = useHashPower();
   const { ads } = useAdConfig();
@@ -53,6 +58,14 @@ export function useGameReward({
     }, [user?.id, storeMiningActive]),
   );
 
+  const freeRetries = ads.gameFreeRetries;
+  const [retriesLeft, setRetriesLeft] = useState(() => freeRetriesLeft(retryKey, freeRetries));
+  const refreshRetriesLeft = useCallback(
+    () => setRetriesLeft(freeRetriesLeft(retryKey, freeRetries)),
+    [retryKey, freeRetries],
+  );
+  useEffect(() => { refreshRetriesLeft(); }, [refreshRetriesLeft]);
+
   const [crediting, setCrediting] = useState(false);
   const [claimedBanner, setClaimedBanner] = useState<string | null>(null);
 
@@ -61,7 +74,7 @@ export function useGameReward({
   const retryEarnedRef = useRef(false);
 
   /** Arm a win so the claim button can redeem it. */
-  const setPendingWin = useCallback((gh: number) => { pendingWinGh.current = gh; }, []);
+  const setPendingWin = useCallback((gh: number) => { pendingWinGh.current = gh; noteWin(retryKey); }, [retryKey]);
   /** Clear reward state when the game deals a fresh round. */
   const resetReward = useCallback(() => {
     pendingWinGh.current = null;
@@ -83,6 +96,8 @@ export function useGameReward({
           user_id: user.id,
           hashpower: gh,
           offset: new Date().getTimezoneOffset(),
+          // Labels this as a game win for the game streak and leaderboard.
+          game: retryKey,
         }),
       });
     } catch {
@@ -90,16 +105,18 @@ export function useGameReward({
     }
     setCrediting(false);
     setClaimedBanner(`+${gh} GH/s is now in your mining power.`);
-  }, [user?.id, addHashPower]);
+  }, [user?.id, addHashPower, retryKey]);
 
   const onClaimAdClosed = useCallback(() => {
     if (claimEarnedRef.current) {
       claimEarnedRef.current = false;
+      resetFreeRetries(retryKey);
+      refreshRetriesLeft();
       onNewRound();
     } else {
       Alert.alert('Ad not completed', 'Please watch the full video to redeem your reward.');
     }
-  }, [onNewRound]);
+  }, [onNewRound, retryKey, refreshRetriesLeft]);
 
   const {
     show: showClaimAd, loading: claimAdLoading, loaded: claimAdLoaded,
@@ -109,11 +126,13 @@ export function useGameReward({
   const onRetryAdClosed = useCallback(() => {
     if (retryEarnedRef.current) {
       retryEarnedRef.current = false;
+      resetFreeRetries(retryKey);
+      refreshRetriesLeft();
       onNewRound();
     } else {
       Alert.alert('Ad not completed', 'Please watch the full video to try again.');
     }
-  }, [onNewRound]);
+  }, [onNewRound, retryKey, refreshRetriesLeft]);
 
   const {
     show: showRetryAd, loading: retryAdLoading, loaded: retryAdLoaded,
@@ -134,13 +153,19 @@ export function useGameReward({
   }, [claimAdLoaded, showClaimAd]);
 
   const openRetryAd = useCallback(() => {
+    noteLoss(retryKey);
+    if (takeFreeRetry(retryKey, freeRetries)) {
+      refreshRetriesLeft();
+      onNewRound();
+      return;
+    }
     if (!retryAdLoaded) {
       showRetryAd();
       Alert.alert('Almost ready', 'The video is still loading. Try again in a few seconds.');
       return;
     }
     showRetryAd();
-  }, [retryAdLoaded, showRetryAd]);
+  }, [retryAdLoaded, showRetryAd, retryKey, freeRetries, refreshRetriesLeft, onNewRound]);
 
   return {
     isMiningActive,
@@ -150,5 +175,7 @@ export function useGameReward({
     resetReward,
     openClaimAd, claimAdLoading, claimAdLoaded,
     openRetryAd, retryAdLoading, retryAdLoaded,
+    /** Losses that can still be retried without a video. */
+    freeRetriesLeft: retriesLeft,
   };
 }

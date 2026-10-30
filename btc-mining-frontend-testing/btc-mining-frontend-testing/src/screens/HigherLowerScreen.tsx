@@ -151,6 +151,7 @@ export default function HigherLowerScreen() {
               adLoading={reward.retryAdLoading}
               adLoaded={reward.retryAdLoaded}
               onRetry={reward.openRetryAd}
+              freeRetriesLeft={reward.freeRetriesLeft}
             />
           )}
 

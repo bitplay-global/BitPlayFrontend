@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from 'react-native';
+import { luckyRoll } from '../services/gameRetryCredits';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import GameScreenWrapper from '../components/GameScreenWrapper';
@@ -73,7 +74,7 @@ export default function SlotMachineScreen() {
     if (phase !== 'ready') return;
     setPhase('spinning');
 
-    const final = [randomIdx(), randomIdx(), randomIdx()];
+    const final = luckyRoll('Slot Machine', () => [randomIdx(), randomIdx(), randomIdx()], r => evaluate(r) <= 0);
 
     // Each reel scrolls the same distance but over a longer duration, which is
     // what produces the staggered left-to-right stop.
@@ -180,6 +181,7 @@ export default function SlotMachineScreen() {
               adLoading={reward.retryAdLoading}
               adLoaded={reward.retryAdLoaded}
               onRetry={reward.openRetryAd}
+              freeRetriesLeft={reward.freeRetriesLeft}
             />
           )}
 

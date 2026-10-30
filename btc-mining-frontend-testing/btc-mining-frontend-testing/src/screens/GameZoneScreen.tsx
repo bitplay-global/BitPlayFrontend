@@ -17,6 +17,7 @@ import { BannerAdSlot } from '../components/ads/BannerAdSlot';
 import { BannerAdSize } from 'react-native-google-mobile-ads';
 import { DEFAULT_ADMOB_BANNER_ID } from '../services/adUnitDefaults';
 import { useAdConfig } from '../providers/AdConfigProvider';
+import GameEngagementCard from '../components/games/GameEngagementCard';
 import { WIN_GH_REWARD as TRADING_WIN_GH } from './TradingScreen';
 import { WIN_REWARD_GH as MEMORY_WIN_GH } from './MemoryCardMatchScreen';
 import { SLICES as SPIN_SLICES } from './SpinAndWinScreen';
@@ -50,7 +51,7 @@ const { width: W } = Dimensions.get('window');
 // actually earns.
 const SPIN_MAX_GH = Math.max(...SPIN_SLICES.filter(s => s.gh > 0).map(s => s.gh));
 
-interface GameEntry {
+export interface GameEntry {
   name: string;
   icon: string;
   iconImage?: any;
@@ -62,7 +63,8 @@ interface GameEntry {
   rewardLabel: string;
 }
 
-const GAMES: GameEntry[] = [
+/** Every game, with its route, icon and real reward label. Home's Play & Earn uses it too. */
+export const GAMES: GameEntry[] = [
   { name: 'BTC Trading', icon: 'bitcoin', iconImage: require('../assets/images/icon_btc_trading.png'), color: '#f59e0b', route: 'TradingScreen', category: 'Featured', desc: 'Trade BTC and earn rewards', rewardLabel: `+${TRADING_WIN_GH} GH/s` },
   { name: 'Spin & Win', icon: 'rotate-3d-variant', iconImage: require('../assets/images/game_spin.png'), color: '#22d3ee', route: 'SpinAndWin', category: 'Featured', desc: 'Spin the wheel, win rewards', rewardLabel: `Up to ${SPIN_MAX_GH} GH/s` },
   { name: 'Memory Match', icon: 'cards', iconImage: require('../assets/images/icon_memory_match.png'), color: '#7c3aed', route: 'MemoryCardMatch', category: 'Featured', desc: 'Match all the pairs', rewardLabel: `+${MEMORY_WIN_GH} GH/s` },
@@ -287,6 +289,9 @@ export default function GameZoneScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: bottomBarHeight + SPACING.lg }}
         >
+
+          {/* Game streak + weekly leaderboard */}
+          <GameEngagementCard />
 
           {/* Hot / Popular section */}
           {(loading || popular.length > 0) && (

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from 'react-native';
+import { luckyRoll } from '../services/gameRetryCredits';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import GameScreenWrapper from '../components/GameScreenWrapper';
@@ -70,8 +71,11 @@ export default function LuckyDiceScreen() {
 
     rollTimer.current = setTimeout(() => {
       if (tickTimer.current) { clearInterval(tickTimer.current); tickTimer.current = null; }
-      const a = Math.floor(Math.random() * 6);
-      const b = Math.floor(Math.random() * 6);
+      const [a, b] = luckyRoll(
+        'Lucky Dice',
+        () => [Math.floor(Math.random() * 6), Math.floor(Math.random() * 6)],
+        ([x, y]) => x + y + 2 <= TARGET,
+      );
       setDice([a, b]);
       const total = a + b + 2;
       if (total > TARGET) {
@@ -150,6 +154,7 @@ export default function LuckyDiceScreen() {
               adLoading={reward.retryAdLoading}
               adLoaded={reward.retryAdLoaded}
               onRetry={reward.openRetryAd}
+              freeRetriesLeft={reward.freeRetriesLeft}
             />
           )}
 

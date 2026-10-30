@@ -69,26 +69,34 @@ export function WinPanel({
 }
 
 export function LosePanel({
-  title, body, adLoading, adLoaded, onRetry,
+  title, body, adLoading, adLoaded, onRetry, freeRetriesLeft = 0,
 }: {
   title: string; body?: string; adLoading: boolean; adLoaded: boolean; onRetry: () => void;
+  /** Free retries left before a loss needs a video (useGameReward). */
+  freeRetriesLeft?: number;
 }) {
+  const free = freeRetriesLeft > 0;
+  const waiting = !free && adLoading && !adLoaded;
   return (
     <View style={[s.card, s.cardLose]}>
       <LinearGradient colors={['#2D1020', '#1A0A18']} style={s.cardGrad}>
         <View style={s.cardInner}>
           <Icon name="emoticon-sad-outline" size={34} color="#F87171" />
           <Text style={s.title}>{title}</Text>
-          <Text style={s.body}>{body ?? 'Watch a short video to try again.'}</Text>
-          <TouchableOpacity style={s.btn} onPress={onRetry} disabled={adLoading && !adLoaded} activeOpacity={0.88}>
+          <Text style={s.body}>
+            {free
+              ? `Try again for free — ${freeRetriesLeft} free ${freeRetriesLeft === 1 ? 'retry' : 'retries'} left before a short video.`
+              : (body ?? 'Watch a short video to try again.')}
+          </Text>
+          <TouchableOpacity style={s.btn} onPress={onRetry} disabled={waiting} activeOpacity={0.88}>
             <LinearGradient colors={['#EF4444', '#B91C1C']} style={s.btnGrad}>
               <View style={s.btnInner}>
-                {adLoading && !adLoaded ? (
+                {waiting ? (
                   <ActivityIndicator color="#FFF" />
                 ) : (
                   <>
-                    <Icon name="play-circle" size={20} color="#FFF" />
-                    <Text style={s.btnTxtLight} numberOfLines={1}>Watch Ad &amp; Try Again</Text>
+                    <Icon name={free ? 'refresh' : 'play-circle'} size={20} color="#FFF" />
+                    <Text style={s.btnTxtLight} numberOfLines={1}>{free ? 'Try Again' : 'Watch Ad & Try Again'}</Text>
                   </>
                 )}
               </View>

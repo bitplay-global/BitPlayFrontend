@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { BANNER_ADS_ENABLED } from '../config/adPlacements';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BalanceCard from '../components/NewWallet/BalanceCard';
+import WithdrawProgress from '../components/WithdrawProgress';
 import { useAuth } from '../auth/AuthProvider';
 import { get_data_uri } from '../config/api';
 import { useNavigation } from '@react-navigation/native';
@@ -79,6 +80,8 @@ const WalletNewScreen = () => {
   const bannerUnitId = ads?.homeBannerId ?? DEFAULT_ADMOB_BANNER_ID;
 
   const [btcBalance, setBtcBalance] = useState(0);
+  // Hides the withdraw progress bar until the real balance has arrived.
+  const [balanceLoaded, setBalanceLoaded] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [_balanceLoading, setBalanceLoading] = useState(false);
@@ -140,6 +143,7 @@ const WalletNewScreen = () => {
             '0',
         );
         setBtcBalance(btcVal + btcValueDeposited);
+        setBalanceLoaded(true);
       }
     } catch (err) {
     }
@@ -266,6 +270,13 @@ const WalletNewScreen = () => {
           showUSd={showUSD}
           handleButtonPress={handleWithdraw}
           buttonText="Withdraw"
+          btcValue={btcBalance}
+        />
+
+        {/* Same BTC + BTC_DEPOSIT total the Lightning withdrawal treats as available. */}
+        <WithdrawProgress
+          balanceBtc={balanceLoaded ? btcBalance : null}
+          style={styles.withdrawProgress}
         />
 
         <TouchableOpacity
@@ -369,6 +380,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5,9,20,0.92)',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  withdrawProgress: {
+    marginTop: 14,
   },
   bitrefillCard: {
     flexDirection: 'row',

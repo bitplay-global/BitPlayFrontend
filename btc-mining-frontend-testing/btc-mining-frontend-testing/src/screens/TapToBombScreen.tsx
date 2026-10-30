@@ -3,6 +3,8 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Alert, ActivityIndicator,
   Dimensions,
 } from 'react-native';
+import { isLuckyRound, noteWin } from '../services/gameRetryCredits';
+import { useFreeRetries } from '../hooks/useFreeRetries';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import LinearGradient from 'react-native-linear-gradient';
@@ -55,7 +57,9 @@ function pickWeightedGh(): number {
 
 function dealBoard(): Tile[] {
   const bombIdx = new Set<number>();
-  while (bombIdx.size < BOMB_COUNT) {
+  // Lucky round (services/gameRetryCredits.ts): one bomb fewer.
+  const bombs = isLuckyRound('Tap to Bomb') ? Math.max(1, BOMB_COUNT - 1) : BOMB_COUNT;
+  while (bombIdx.size < bombs) {
     bombIdx.add(Math.floor(Math.random() * GRID_SIZE));
   }
   return Array.from({ length: GRID_SIZE }, (_, i) =>
@@ -210,6 +214,7 @@ export default function TapToBombScreen() {
       setRevealedIndices(new Set(board.map((_, i) => i)));
       if (tile.kind === 'safe') {
         pendingWinGh.current = tile.gh;
+        noteWin('Tap to Bomb');
         setPhase('revealed_win');
       } else {
         setPhase('revealed_lose');
@@ -234,7 +239,7 @@ export default function TapToBombScreen() {
       await fetch(get_data_uri('USERMININGDETAILS'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id, hashpower: gh, offset: new Date().getTimezoneOffset() }),
+        body: JSON.stringify({ user_id: user.id, hashpower: gh, offset: new Date().getTimezoneOffset(), game: 'Tap to Bomb' }),
       });
     } catch {
       // Local credit above already stands; the backend record is best-effort.
@@ -243,21 +248,25 @@ export default function TapToBombScreen() {
     setClaimedBanner(`+${gh} GH/s is now in your mining power.`);
   }, [user?.id, addHashPower]);
 
+  // Losses retry for free a few times before one needs a video (services/gameRetryCredits.ts).
+  const freeRetry = useFreeRetries('Tap to Bomb');
+
   const onClaimAdClosed = useCallback(() => {
     if (claimEarnedRef.current) {
       claimEarnedRef.current = false;
+      freeRetry.reset();
       dealNewBoard();
     } else {
       Alert.alert('Ad not completed', 'Please watch the full video to redeem your reward.');
     }
-  }, [dealNewBoard]);
+  }, [dealNewBoard, freeRetry]);
 
   const {
     show: showClaimAd, loading: claimAdLoading, loaded: claimAdLoaded,
   } = useRewardedVideoAd(onClaimAdReward, { primaryUnitId: ads.rewardedVideoId }, onClaimAdClosed);
 
   // --- Loss retry: watch ad -> unlock a new board (no free retry) ---
-  const onRetryAdReward = useCallback(() => { retryEarnedRef.current = true; }, []);
+  const onRetryAdReward = useCallback(() => { retryEarnedRef.current = true; freeRetry.reset(); }, [freeRetry]);
   const onRetryAdClosed = useCallback(() => {
     if (retryEarnedRef.current) {
       retryEarnedRef.current = false;
@@ -284,6 +293,10 @@ export default function TapToBombScreen() {
   };
 
   const openRetryAd = () => {
+    if (freeRetry.tryFree()) {
+      dealNewBoard();
+      return;
+    }
     if (!retryAdLoaded) {
       // Kick a fresh request instead of only apologising -- a failed load
       // otherwise leaves this button permanently useless.
@@ -373,15 +386,15 @@ export default function TapToBombScreen() {
                     <Icon name="bomb" size={30} color={BOMB_ACCENT} />
                   </View>
                   <Text style={s.outcomeTitle}>Boom! Better Luck Next Time!</Text>
-                  <Text style={s.outcomeBody}>Watch a short video to try again.</Text>
-                  <TouchableOpacity style={s.adBtn} onPress={openRetryAd} disabled={retryAdLoading && !retryAdLoaded} activeOpacity={0.88}>
+                  <Text style={s.outcomeBody}>{freeRetry.left > 0 ? `Try again for free — ${freeRetry.left} free ${freeRetry.left === 1 ? 'retry' : 'retries'} left before a short video.` : 'Watch a short video to try again.'}</Text>
+                  <TouchableOpacity style={s.adBtn} onPress={openRetryAd} disabled={freeRetry.left === 0 && retryAdLoading && !retryAdLoaded} activeOpacity={0.88}>
                     <View style={s.adBtnBomb}>
-                      {retryAdLoading && !retryAdLoaded ? (
+                      {freeRetry.left === 0 && retryAdLoading && !retryAdLoaded ? (
                         <ActivityIndicator color="#FFF" />
                       ) : (
                         <>
-                          <Icon name="play-circle" size={22} color="#FFF" />
-                          <Text style={s.adBtnTextLight}>Watch Ad & Try Again</Text>
+                          <Icon name={freeRetry.left > 0 ? 'refresh' : 'play-circle'} size={22} color="#FFF" />
+                          <Text style={s.adBtnTextLight}>{freeRetry.left > 0 ? 'Try Again' : 'Watch Ad & Try Again'}</Text>
                         </>
                       )}
                     </View>
