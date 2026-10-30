@@ -22,8 +22,10 @@ import GameRulesNote from '../components/GameRulesNote';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import LinearGradient from 'react-native-linear-gradient';
-import Svg, { Path, G, Text as SvgText, Rect } from 'react-native-svg';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import SpinWheel from '../components/games/spin/SpinWheel';
+import WinBurst from '../components/games/spin/WinBurst';
 import { RootStackParamList } from '../components/types';
 import { useHashPower } from '../stores/HashPowerStore';
 import { useAuth } from '../auth/AuthProvider';
@@ -176,9 +178,8 @@ export const SLICES: WheelSlice[] = [
   },
 ];
 
-const HIGHLIGHT = '#8B5CF6';
-const SLICE_STROKE = 'rgba(251,191,36,0.15)';
-
+/** Legend colours, in slice order (match SpinWheel's palette). */
+const LEGEND_COLORS = ['#8B5CF6', '#22D3EE', '#C026D3', '#FBBF24'];
 
 type Phase = 'idle' | 'spinning' | 'won_pending' | 'lost';
 
@@ -193,21 +194,9 @@ function pickWeightedIndex(): number {
 }
 
 
-function pointOnWheel(cx: number, cy: number, r: number, phiCwFromTopDeg: number) {
-  const rad = (phiCwFromTopDeg * Math.PI) / 180;
-  return {
-    x: cx + r * Math.sin(rad),
-    y: cy - r * Math.cos(rad),
-  };
-}
-
-function slicePath(cx: number, cy: number, r: number, startPhi: number, endPhi: number): string {
-  const p0 = pointOnWheel(cx, cy, r, startPhi);
-  const p1 = pointOnWheel(cx, cy, r, endPhi);
-  let delta = endPhi - startPhi;
-  if (delta < 0) delta += 360;
-  const largeArc = delta > 180 ? 1 : 0;
-  return `M ${cx} ${cy} L ${p0.x} ${p0.y} A ${r} ${r} 0 ${largeArc} 1 ${p1.x} ${p1.y} Z`;
+function isSameLocalDay(ts: number, now: Date): boolean {
+  const d = new Date(ts);
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 }
 
 type Nav = StackNavigationProp<RootStackParamList, 'SpinAndWin'>;
@@ -274,14 +263,13 @@ const SpinAndWinScreen: React.FC = () => {
 
   const resultScale = useRef(new Animated.Value(0.94)).current;
   const hubPulse = useRef(new Animated.Value(0)).current;
+  const amountScale = useRef(new Animated.Value(0.3)).current;
+  const [burstKey, setBurstKey] = useState(0);
 
   const n = SLICES.length;
   const segmentAngle = 360 / n;
-  const wheelSize = Math.min(width - 36, 360);
-  const cx = wheelSize / 2;
-  const cy = wheelSize / 2;
-  const r = wheelSize / 2 - 6;
-  const hubSize = Math.round(wheelSize * 0.36);
+  const wheelSize = Math.min(width - 48, 340);
+  const hubSize = Math.round(wheelSize * 0.3);
 
   const refreshSpinHistory = useCallback(async () => {
     if (!user?.id) {
@@ -378,8 +366,8 @@ const SpinAndWinScreen: React.FC = () => {
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(hubPulse, { toValue: 1, duration: 4600, useNativeDriver: true }),
-        Animated.timing(hubPulse, { toValue: 0, duration: 4600, useNativeDriver: true }),
+        Animated.timing(hubPulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(hubPulse, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ]),
     );
     loop.start();
@@ -388,28 +376,34 @@ const SpinAndWinScreen: React.FC = () => {
 
   useEffect(() => {
     if (phase === 'won_pending' || phase === 'lost') {
-      resultScale.setValue(0.94);
+      resultScale.setValue(0.9);
       Animated.spring(resultScale, {
         toValue: 1,
-        friction: 8,
-        tension: 88,
+        friction: 7,
+        tension: 90,
         useNativeDriver: true,
       }).start();
     }
-  }, [phase, resultScale]);
+    if (phase === 'won_pending') {
+      amountScale.setValue(0.3);
+      Animated.spring(amountScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 70,
+        useNativeDriver: true,
+      }).start();
+      setBurstKey(k => k + 1);
+    }
+  }, [phase, resultScale, amountScale]);
 
-  const spinInterpolate = useMemo(() => {
-    const maxDeg = 2_000_000;
-    return spinAnim.interpolate({
-      inputRange: [0, maxDeg],
-      outputRange: ['0deg', `${maxDeg}deg`],
-      extrapolate: 'extend',
-    });
-  }, [spinAnim]);
-
+  // Breathing glow only while the SPIN button is ready.
   const hubScale = hubPulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.04],
+    outputRange: [1, phase === 'idle' ? 1.06 : 1],
+  });
+  const hubGlowOpacity = hubPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: phase === 'idle' ? [0.25, 0.75] : [0.15, 0.15],
   });
 
   const updateRewardCard = (idx: number, gh: number | null, kind: 'win' | 'lose' | 'idle') => {
@@ -461,12 +455,21 @@ const SpinAndWinScreen: React.FC = () => {
     spinAnim.stopAnimation();
     spinAnim.setValue(rotationRef.current);
 
-    Animated.timing(spinAnim, {
-      toValue: target,
-      duration: 4800,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start(({ finished }) => {
+    // Short wind-back, then a long spin that eases into a slow, tense crawl.
+    Animated.sequence([
+      Animated.timing(spinAnim, {
+        toValue: rotationRef.current - 10,
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(spinAnim, {
+        toValue: target,
+        duration: 5200,
+        easing: Easing.bezier(0.2, 0.75, 0.12, 1),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
       rotationRef.current = target % 360000;
       spinAnim.setValue(rotationRef.current);
 
@@ -554,6 +557,12 @@ const SpinAndWinScreen: React.FC = () => {
     () => spinHistory.filter(item => item.status === 'claimed').reduce((sum, item) => sum + item.gh, 0),
     [spinHistory],
   );
+  const todayStats = useMemo(() => {
+    const now = new Date();
+    const today = spinHistory.filter(item => isSameLocalDay(item.ts, now));
+    return { spins: today.length, wins: today.filter(item => item.status !== 'lose').length };
+  }, [spinHistory]);
+  const isLuckyBanner = banner != null && /lucky/i.test(banner);
 
   /** RN SafeAreaView is unreliable for top inset on some Android builds; combine inset + status bar height. */
   const scrollPaddingTop =
@@ -562,8 +571,10 @@ const SpinAndWinScreen: React.FC = () => {
   /** Space so last content clears the fixed bottom banner (~adaptive banner + safe area). */
   const scrollBottomPad = 88 + insets.bottom;
 
+  const stageSize = wheelSize + 28;
+
   return (
-    <LinearGradient colors={['#14082A', '#241043', '#1A0B32']} style={styles.root} start={{ x: 0.2, y: 0 }} end={{ x: 0.9, y: 1 }}>
+    <LinearGradient colors={['#050914', '#0A0F1C', '#0f172a']} style={styles.root} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.safe}>
         {/* Top Banner Ad */}
@@ -575,7 +586,9 @@ const SpinAndWinScreen: React.FC = () => {
           {isMiningActive === false && (
             <View style={styles.miningLockOverlay} pointerEvents="box-none">
               <View style={styles.miningLockCard}>
-                <Icon name="pickaxe" size={36} color="#FBBF24" />
+                <View style={styles.miningLockIcon}>
+                  <Icon name="pickaxe" size={30} color="#FBBF24" />
+                </View>
                 <Text style={styles.miningLockTitle}>Mining Not Active</Text>
                 <Text style={styles.miningLockBody}>
                   Start mining on the home screen to unlock Spin and Win.
@@ -596,146 +609,144 @@ const SpinAndWinScreen: React.FC = () => {
             showsVerticalScrollIndicator={false}
             bounces={false}
             keyboardShouldPersistTaps="handled">
+            {/* Header */}
             <View style={styles.headerRow}>
               <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn} hitSlop={10}>
                 <Icon name="close" size={22} color="#F8FAFC" />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>Spin and Win!</Text>
+              <View style={styles.headerCenter}>
+                <Text style={styles.headerEyebrow}>BITPLAY ARCADE</Text>
+                <Text style={styles.headerTitle}>
+                  Spin <Text style={styles.headerTitleAccent}>&</Text> Win
+                </Text>
+              </View>
               <View style={styles.headerSpacer} />
             </View>
+            <Text style={styles.tagline}>Spin the wheel and boost your mining power</Text>
 
-            <Text style={styles.multiplyTitle}>Multiply your earnings!</Text>
-
-            <View style={styles.rewardCard}>
-              <LinearGradient colors={['#FBBF24', '#D97706']} style={styles.rewardPill}>
-                <View style={styles.rewardPillInner}>
-                  <Text style={styles.rewardPillText}>{rewardPill}</Text>
-                </View>
-              </LinearGradient>
-              <View style={styles.rewardCardInner}>
-                <View style={styles.coinArtWrap}>
-                  <Icon name="circle-multiple" size={48} color="#E5E7EB" />
-                  <View style={styles.coinAccent}>
-                    <Icon name="star-four-points" size={22} color="#FBBF24" />
-                  </View>
-                </View>
-                <View style={styles.rewardTextCol}>
-                  <Text style={styles.addedLabel}>Added to mining power</Text>
-                  <Text style={styles.rewardBig}>{rewardAmountLine}</Text>
-                </View>
-              </View>
+            {/* Stats strip */}
+            <View style={styles.statsRow}>
+              <StatTile icon="rotate-right" color="#18D4F2" label="Spins today" value={String(todayStats.spins)} />
+              <StatTile icon="trophy-variant" color="#FBBF24" label="Wins today" value={String(todayStats.wins)} />
+              <StatTile icon="lightning-bolt" color="#4ADE80" label="Claimed GH/s" value={`+${totalClaimedFromSpinner}`} />
             </View>
 
-            {/* <View style={styles.hpRow}>
-            <Icon name="lightning-bolt" size={18} color="#FBBF24" />
-            <Text style={styles.hpRowText}>
-              Live mining power:{' '}
-              <Text style={styles.hpRowBold}>{displayMiningPowerGh.toFixed(1)} Gh/s</Text>
-            </Text>
-          </View> */}
+            {/* Current prize display */}
+            <View style={styles.prizeBar}>
+              <View style={styles.prizeCoin}>
+                <Icon name="bitcoin" size={22} color="#FBBF24" />
+              </View>
+              <View style={styles.prizeTextCol}>
+                <Text style={styles.addedLabel}>Added to mining power</Text>
+                <Text style={styles.rewardBig} numberOfLines={1} adjustsFontSizeToFit>
+                  {rewardAmountLine}
+                </Text>
+              </View>
+              <LinearGradient colors={['#FBBF24', '#D97706']} style={styles.rewardPill}>
+                <View style={styles.rewardPillInner}>
+                  <Text style={styles.rewardPillText} numberOfLines={1}>
+                    {rewardPill}
+                  </Text>
+                </View>
+              </LinearGradient>
+            </View>
 
             {banner ? (
-              <View style={styles.banner}>
-                <Icon name="check-circle" size={18} color="#4ADE80" />
-                <Text style={styles.bannerText}>{banner}</Text>
+              <View style={[styles.banner, isLuckyBanner && styles.bannerLucky]}>
+                <Icon
+                  name={isLuckyBanner ? 'clover' : 'check-circle'}
+                  size={18}
+                  color={isLuckyBanner ? '#FBBF24' : '#4ADE80'}
+                />
+                <Text style={[styles.bannerText, isLuckyBanner && styles.bannerTextLucky]}>{banner}</Text>
               </View>
             ) : null}
 
-            <View style={[styles.wheelOuter, { width: wheelSize, height: wheelSize }]} pointerEvents="box-none">
-              <View style={styles.pointerStack} pointerEvents="none">
-                <View style={styles.pointerArc} />
-                <View style={styles.pointerTriangle} />
-              </View>
+            {/* Wheel stage */}
+            <View style={[styles.stage, { height: stageSize }]}>
+              <Svg width={stageSize} height={stageSize} style={styles.stageGlow}>
+                <Defs>
+                  <RadialGradient id="stageGlow" cx="50%" cy="50%" r="50%">
+                    <Stop offset="0.55" stopColor="#7c3aed" stopOpacity="0.45" />
+                    <Stop offset="0.8" stopColor="#18D4F2" stopOpacity="0.12" />
+                    <Stop offset="1" stopColor="#050914" stopOpacity="0" />
+                  </RadialGradient>
+                </Defs>
+                <Circle cx={stageSize / 2} cy={stageSize / 2} r={stageSize / 2} fill="url(#stageGlow)" />
+              </Svg>
 
-              <Animated.View
-                pointerEvents="none"
-                style={[styles.wheelRotate, { transform: [{ rotate: spinInterpolate }] }]}>
-                <Svg width={wheelSize} height={wheelSize}>
-                  <G>
-                    {SLICES.map((slice, i) => {
-                      const start = i * segmentAngle - segmentAngle / 2;
-                      const end = i * segmentAngle + segmentAngle / 2;
-                      const mid = i * segmentAngle;
-                      const rim = -r * 0.52;
-                      const pillW = 54;
-                      const pillH = 40;
-                      const fill =
-                        winnerIndex === i && (phase === 'won_pending' || phase === 'lost')
-                          ? slice.kind === 'try_again'
-                            ? '#5B4A6E'
-                            : HIGHLIGHT
-                          : i % 2 === 0
-                            ? slice.fill
-                            : slice.fillAlt;
-                      return (
-                        <G key={slice.key}>
-                          <Path d={slicePath(cx, cy, r, start, end)} fill={fill} stroke={SLICE_STROKE} strokeWidth={1} />
-                          <G transform={`translate(${cx},${cy}) rotate(${mid}) translate(0, ${rim})`}>
-                            <Rect
-                              x={-pillW / 2}
-                              y={-pillH / 2}
-                              width={pillW}
-                              height={pillH}
-                              rx={11}
-                              fill="rgba(0,0,0,0.42)"
-                              stroke="rgba(251,191,36,0.4)"
-                              strokeWidth={1}
-                            />
-                            <SvgText
-                              x={0}
-                              y={slice.kind === 'try_again' ? -7 : -6}
-                              fill="#FEFCE8"
-                              fontSize={slice.kind === 'try_again' ? 9 : 13}
-                              fontWeight="800"
-                              textAnchor="middle"
-                              alignmentBaseline="middle">
-                              {slice.line1}
-                            </SvgText>
-                            <SvgText
-                              x={0}
-                              y={slice.kind === 'try_again' ? 9 : 10}
-                              fill="#E9D5FF"
-                              fontSize={slice.kind === 'try_again' ? 8 : 10}
-                              fontWeight="700"
-                              textAnchor="middle"
-                              alignmentBaseline="middle">
-                              {slice.line2}
-                            </SvgText>
-                          </G>
-                        </G>
-                      );
-                    })}
-                  </G>
-                </Svg>
-              </Animated.View>
+              <SpinWheel size={wheelSize} slices={SLICES} spinAnim={spinAnim} phase={phase} winnerIndex={winnerIndex}>
+                <Animated.View
+                  pointerEvents="box-none"
+                  style={[styles.hubWrap, { width: hubSize, height: hubSize, transform: [{ scale: hubScale }] }]}>
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.hubGlow,
+                      {
+                        width: hubSize * 1.4,
+                        height: hubSize * 1.4,
+                        borderRadius: hubSize * 0.7,
+                        opacity: hubGlowOpacity,
+                      },
+                    ]}
+                  />
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={runSpin}
+                    disabled={!canSpin}
+                    accessibilityRole="button"
+                    accessibilityLabel="Spin the wheel"
+                    style={[styles.hubTouchable, { borderRadius: hubSize / 2 }, !canSpin && styles.hubTouchableDisabled]}>
+                    <LinearGradient
+                      colors={['#FEF3C7', '#F59E0B', '#B45309']}
+                      start={{ x: 0.2, y: 0 }}
+                      end={{ x: 0.8, y: 1 }}
+                      style={[StyleSheet.absoluteFill, { borderRadius: hubSize / 2 }]}
+                    />
+                    <View style={[styles.hubCore, { borderRadius: hubSize / 2 }]}>
+                      <LinearGradient
+                        colors={['#1E1B4B', '#0A0F1C']}
+                        style={[StyleSheet.absoluteFill, { borderRadius: hubSize / 2 }]}
+                      />
+                      {phase === 'spinning' ? (
+                        <ActivityIndicator color="#18D4F2" />
+                      ) : (
+                        <>
+                          <Text style={styles.hubSpinText}>SPIN</Text>
+                          <Text style={styles.hubSubText}>{canSpin ? 'TAP' : '•••'}</Text>
+                        </>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+              </SpinWheel>
 
-              <Animated.View
-                pointerEvents="box-none"
-                style={[styles.hubTouchableWrap, { width: hubSize, height: hubSize, transform: [{ scale: hubScale }] }]}>
-                <TouchableOpacity
-                  activeOpacity={0.92}
-                  onPress={runSpin}
-                  disabled={!canSpin}
-                  style={[styles.hubTouchable, !canSpin && styles.hubTouchableDisabled]}>
-                  <LinearGradient colors={['#FDE68A', '#F59E0B', '#B45309']} style={styles.hubGrad}>
-                    {phase === 'spinning' ? (
-                      <ActivityIndicator color="#422006" />
-                    ) : (
-                      <Text style={styles.hubSpinText}>SPIN</Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              </Animated.View>
+              <WinBurst size={wheelSize * 1.1} trigger={burstKey} />
             </View>
 
+            {phase === 'idle' || phase === 'spinning' ? (
+              <Text style={styles.stageHint}>
+                {phase === 'spinning' ? 'Good luck…' : 'Tap SPIN to try your luck'}
+              </Text>
+            ) : null}
+
             {showOutcomeCard ? (
-              <Animated.View style={[styles.outcomeCard, { transform: [{ scale: resultScale }] }]}>
-                <LinearGradient colors={['#2D1B4E', '#1A0F2E']} style={styles.outcomeGradient}>
+              <Animated.View style={[styles.outcomeCard, styles.outcomeCardWin, { transform: [{ scale: resultScale }] }]}>
+                <LinearGradient colors={['#3B2A06', '#1A1030', '#0A0F1C']} style={styles.outcomeGradient}>
                   <View style={styles.outcomeInner}>
-                    <Text style={styles.outcomeTitle}>You won +{wonGh} Gh/s</Text>
+                    <View style={styles.eyebrowRow}>
+                      <Icon name="trophy-variant" size={16} color="#FBBF24" />
+                      <Text style={styles.winEyebrow}>YOU WON</Text>
+                      <Icon name="trophy-variant" size={16} color="#FBBF24" />
+                    </View>
+                    <Animated.View style={[styles.winAmountRow, { transform: [{ scale: amountScale }] }]}>
+                      <Text style={styles.winAmount}>+{wonGh}</Text>
+                      <Text style={styles.winUnit}>GH/s</Text>
+                    </Animated.View>
                     <Text style={styles.outcomeBody}>Watch the video to add it to your mining power.</Text>
                     <TouchableOpacity style={styles.adBtn} onPress={openClaimAd} disabled={claimAdLoading && !claimAdLoaded}>
-                      <LinearGradient colors={['#FBBF24', '#D97706']} style={styles.adBtnGrad}>
+                      <LinearGradient colors={['#FDE68A', '#FBBF24', '#D97706']} style={styles.adBtnGrad}>
                         <View style={styles.adBtnInner}>
                           {claimAdLoading && !claimAdLoaded ? (
                             <ActivityIndicator color="#1C1917" />
@@ -754,14 +765,19 @@ const SpinAndWinScreen: React.FC = () => {
             ) : null}
 
             {phase === 'lost' ? (
-              <Animated.View style={[styles.outcomeCard, { transform: [{ scale: resultScale }] }]}>
-                <LinearGradient colors={['#2D1020', '#1A0A18']} style={styles.outcomeGradient}>
+              <Animated.View style={[styles.outcomeCard, styles.outcomeCardLose, { transform: [{ scale: resultScale }] }]}>
+                <LinearGradient colors={['#2A1022', '#140B24', '#0A0F1C']} style={styles.outcomeGradient}>
                   <View style={styles.outcomeInner}>
-                    <Icon name="refresh-circle" size={36} color="#F87171" style={{ marginBottom: 6 }} />
+                    <View style={styles.loseIcon}>
+                      <Icon name="emoticon-sad-outline" size={26} color="#F87171" />
+                    </View>
+                    <Text style={styles.loseEyebrow}>SO CLOSE!</Text>
                     <Text style={styles.outcomeTitle}>Try Again!</Text>
                     <Text style={styles.outcomeBody}>{freeRetry.left > 0 ? `Try again for free — ${freeRetry.left} free ${freeRetry.left === 1 ? 'retry' : 'retries'} left before a short video.` : 'Watch a short video to spin again.'}</Text>
                     <TouchableOpacity style={styles.adBtn} onPress={openRetryAd} disabled={freeRetry.left === 0 && retryAdLoading && !retryAdLoaded}>
-                      <LinearGradient colors={['#EF4444', '#B91C1C']} style={styles.adBtnGrad}>
+                      <LinearGradient
+                        colors={freeRetry.left > 0 ? ['#8B5CF6', '#6D28D9'] : ['#EF4444', '#B91C1C']}
+                        style={styles.adBtnGrad}>
                         <View style={styles.adBtnInner}>
                           {freeRetry.left === 0 && retryAdLoading && !retryAdLoaded ? (
                             <ActivityIndicator color="#FFF" />
@@ -779,38 +795,71 @@ const SpinAndWinScreen: React.FC = () => {
               </Animated.View>
             ) : null}
 
-            <View style={styles.historyCard}>
+            {/* Prize legend */}
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Icon name="gift-outline" size={18} color="#18D4F2" />
+                <Text style={styles.cardTitle}>Prizes on the wheel</Text>
+              </View>
+              <View style={styles.legendWrap}>
+                {SLICES.filter(s => s.kind !== 'try_again').map((s, i) => (
+                  <View key={s.key} style={styles.legendChip}>
+                    <View style={[styles.legendDot, { backgroundColor: LEGEND_COLORS[i % LEGEND_COLORS.length] }]} />
+                    <Text style={styles.legendText}>{s.kind === 'double' ? `2× · ${s.gh} GH/s` : `${s.gh} GH/s`}</Text>
+                  </View>
+                ))}
+                <View style={styles.legendChip}>
+                  <View style={[styles.legendDot, styles.legendDotMuted]} />
+                  <Text style={[styles.legendText, styles.legendTextMuted]}>Try again</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* History */}
+            <View style={styles.card}>
               <View style={styles.historyHeaderRow}>
-                <Text style={styles.historyTitle}>Spin History</Text>
+                <View style={styles.cardHeaderRow}>
+                  <Icon name="history" size={18} color="#18D4F2" />
+                  <Text style={styles.cardTitle}>Spin History</Text>
+                </View>
                 <View style={styles.claimedBadge}>
-                  <Text style={styles.claimedBadgeText}>Claimed total: +{totalClaimedFromSpinner} Gh/s</Text>
+                  <Text style={styles.claimedBadgeText} numberOfLines={1}>
+                    Claimed total: +{totalClaimedFromSpinner} Gh/s
+                  </Text>
                 </View>
               </View>
               {spinHistory.length === 0 ? (
-                <Text style={styles.historyEmpty}>No spins yet.</Text>
+                <View style={styles.historyEmptyWrap}>
+                  <Icon name="ticket-percent" size={28} color="#334155" />
+                  <Text style={styles.historyEmpty}>No spins yet. Your results will show up here.</Text>
+                </View>
               ) : (
-                spinHistory.slice(0, 20).map(item => (
-                  <View key={item.id} style={styles.historyRow}>
-                    <View style={styles.historyLeft}>
-                      <Text style={styles.historyLabel}>{item.label}</Text>
-                      <Text style={styles.historyDate}>{new Date(item.ts).toLocaleString()}</Text>
+                spinHistory.slice(0, 20).map((item, idx, arr) => {
+                  const isLost = item.status === 'lose';
+                  const isClaimed = item.status === 'claimed';
+                  const tone = isClaimed ? '#4ADE80' : isLost ? '#F87171' : '#F59E0B';
+                  return (
+                    <View key={item.id} style={[styles.historyRow, idx === arr.length - 1 && styles.historyRowLast]}>
+                      <View style={[styles.historyIcon, { backgroundColor: `${tone}1F`, borderColor: `${tone}55` }]}>
+                        <Icon
+                          name={isClaimed ? 'check' : isLost ? 'close' : 'clock-outline'}
+                          size={16}
+                          color={tone}
+                        />
+                      </View>
+                      <View style={styles.historyLeft}>
+                        <Text style={styles.historyLabel} numberOfLines={1}>{item.label}</Text>
+                        <Text style={styles.historyDate} numberOfLines={1}>{new Date(item.ts).toLocaleString()}</Text>
+                      </View>
+                      <View style={styles.historyRight}>
+                        <Text style={[styles.historyAmount, isLost && styles.historyAmountLost]}>+{item.gh} Gh/s</Text>
+                        <Text style={[styles.historyStatus, { color: tone }]}>
+                          {isClaimed ? 'Claimed' : isLost ? 'Lost' : 'Pending'}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.historyRight}>
-                      <Text style={styles.historyAmount}>+{item.gh} Gh/s</Text>
-                      <Text
-                        style={[
-                          styles.historyStatus,
-                          item.status === 'claimed'
-                            ? styles.historyStatusClaimed
-                            : item.status === 'lose'
-                              ? styles.historyStatusLost
-                              : styles.historyStatusPending,
-                        ]}>
-                        {item.status === 'claimed' ? 'Claimed' : item.status === 'lose' ? 'Lost' : 'Pending'}
-                      </Text>
-                    </View>
-                  </View>
-                ))
+                  );
+                })
               )}
             </View>
 
@@ -842,8 +891,30 @@ const SpinAndWinScreen: React.FC = () => {
   );
 };
 
+const StatTile: React.FC<{ icon: string; color: string; label: string; value: string }> = ({
+  icon,
+  color,
+  label,
+  value,
+}) => (
+  <View style={styles.statTile}>
+    <View style={[styles.statIcon, { backgroundColor: `${color}1A` }]}>
+      <Icon name={icon} size={16} color={color} />
+    </View>
+    <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+      {value}
+    </Text>
+    <Text style={styles.statLabel} numberOfLines={1} adjustsFontSizeToFit>
+      {label}
+    </Text>
+  </View>
+);
+
+const CARD_BG = 'rgba(15,23,42,0.78)';
+const CARD_BORDER = 'rgba(148,163,184,0.14)';
+
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, backgroundColor: '#050914' },
   safe: { flex: 1 },
   screenBody: {
     flex: 1,
@@ -861,7 +932,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#241043',
+    backgroundColor: '#050914',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(148,163,184,0.18)',
     paddingHorizontal: 0,
     alignItems: 'center',
   },
@@ -870,59 +943,138 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // Header
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 4,
-    marginBottom: 6,
+    marginTop: 6,
   },
   closeBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerSpacer: { width: 44 },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 18,
+  headerSpacer: { width: 40 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerEyebrow: {
+    fontSize: 10,
     fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
+    color: '#18D4F2',
+    letterSpacing: 2.5,
   },
-  multiplyTitle: {
+  headerTitle: {
+    marginTop: 2,
     textAlign: 'center',
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
     color: '#FFFFFF',
-    marginBottom: 16,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(124,58,237,0.6)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 10,
+  },
+  headerTitleAccent: { color: '#FBBF24' },
+  tagline: {
+    marginTop: 4,
+    marginBottom: 14,
+    textAlign: 'center',
+    fontSize: 13,
+    color: '#94A3B8',
+  },
+
+  // Stats
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  statTile: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: CARD_BG,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  statIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#F8FAFC',
+  },
+  statLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+
+  // Prize bar
+  prizeBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(10,15,28,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.35)',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  prizeCoin: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(251,191,36,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prizeTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  addedLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  rewardBig: {
+    marginTop: 1,
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#FFFFFF',
     letterSpacing: -0.3,
   },
-  rewardCard: {
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: 'rgba(251,191,36,0.55)',
-    backgroundColor: 'rgba(15,8,30,0.75)',
-    marginBottom: 14,
-    paddingTop: 18,
-    paddingBottom: 16,
-    paddingHorizontal: 14,
-  },
   rewardPill: {
-    position: 'absolute',
-    top: -12,
-    alignSelf: 'center',
     borderRadius: 999,
     overflow: 'hidden',
+    flexShrink: 0,
+    maxWidth: '48%',
   },
   /** Padding on LinearGradient breaks iOS pill sizing; inner View owns insets. */
   rewardPillInner: {
     paddingVertical: 6,
-    paddingHorizontal: 18,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -931,163 +1083,170 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
-  rewardCardInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  coinArtWrap: {
-    width: 72,
-    height: 72,
-    marginRight: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coinAccent: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rewardTextCol: {
-    flex: 1,
-  },
-  addedLabel: {
-    fontSize: 13,
-    color: '#C4B5FD',
-    fontWeight: '600',
-  },
-  rewardBig: {
-    marginTop: 4,
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-  },
-  hpRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  hpRowText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#DDD6FE',
-  },
-  hpRowBold: {
-    fontWeight: '900',
-    color: '#FEF3C7',
-  },
+
+  // Banner
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 8,
     padding: 10,
     borderRadius: 12,
-    backgroundColor: 'rgba(34,197,94,0.12)',
+    backgroundColor: 'rgba(34,197,94,0.1)',
     borderWidth: 1,
     borderColor: 'rgba(74,222,128,0.35)',
   },
-  bannerText: { flex: 1, color: '#DCFCE7', fontSize: 13 },
-  wheelOuter: {
-    position: 'relative',
-    alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 8,
+  bannerLucky: {
+    backgroundColor: 'rgba(251,191,36,0.1)',
+    borderColor: 'rgba(251,191,36,0.45)',
+  },
+  bannerText: { flex: 1, color: '#DCFCE7', fontSize: 13, fontWeight: '600' },
+  bannerTextLucky: { color: '#FEF3C7' },
+
+  // Wheel stage
+  stage: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  stageGlow: {
+    position: 'absolute',
+  },
+  hubWrap: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  pointerStack: {
+  hubGlow: {
     position: 'absolute',
-    top: 4,
-    zIndex: 20,
-    alignItems: 'center',
-  },
-  pointerArc: {
-    width: 44,
-    height: 22,
-    borderTopLeftRadius: 44,
-    borderTopRightRadius: 44,
-    backgroundColor: 'rgba(251,191,36,0.35)',
+    backgroundColor: 'rgba(24,212,242,0.22)',
     borderWidth: 2,
-    borderColor: '#FBBF24',
-    borderBottomWidth: 0,
-    marginBottom: -2,
-  },
-  pointerTriangle: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 16,
-    borderRightWidth: 16,
-    borderTopWidth: 24,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: '#FBBF24',
-  },
-  wheelRotate: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hubTouchableWrap: {
-    position: 'absolute',
-    alignSelf: 'center',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 25,
-    elevation: 20,
+    borderColor: 'rgba(24,212,242,0.55)',
   },
   hubTouchable: {
     width: '100%',
     height: '100%',
-    borderRadius: 999,
     overflow: 'hidden',
     elevation: 12,
     shadowColor: '#F59E0B',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.55,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
     shadowRadius: 10,
   },
   hubTouchableDisabled: {
-    opacity: 0.45,
+    opacity: 0.6,
   },
-  hubGrad: {
-    flex: 1,
-    width: '100%',
+  hubCore: {
+    position: 'absolute',
+    top: 5,
+    left: 5,
+    right: 5,
+    bottom: 5,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(24,212,242,0.45)',
   },
   hubSpinText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
-    color: '#422006',
-    letterSpacing: 3,
+    color: '#FDE68A',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(245,158,11,0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
+  hubSubText: {
+    marginTop: 1,
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#18D4F2',
+    letterSpacing: 2,
+  },
+  stageHint: {
+    marginTop: 4,
+    marginBottom: 6,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#94A3B8',
+    letterSpacing: 0.3,
+  },
+
+  // Outcome cards
   outcomeCard: {
-    marginTop: 0,
-    borderRadius: 18,
+    marginTop: 8,
+    borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(251,191,36,0.25)',
+    borderWidth: 1.5,
     alignSelf: 'stretch',
   },
+  outcomeCardWin: { borderColor: 'rgba(251,191,36,0.7)' },
+  outcomeCardLose: { borderColor: 'rgba(248,113,113,0.35)' },
   /** Padding on LinearGradient breaks iOS layout; keep gradient full-width and pad inner View. */
   outcomeGradient: {
     width: '100%',
     alignSelf: 'stretch',
   },
   outcomeInner: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
     alignItems: 'center',
     width: '100%',
   },
+  eyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  winEyebrow: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#FBBF24',
+    letterSpacing: 3,
+  },
+  winAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: 4,
+  },
+  winAmount: {
+    fontSize: 46,
+    fontWeight: '900',
+    color: '#FEF3C7',
+    letterSpacing: -1,
+    textShadowColor: 'rgba(245,158,11,0.9)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 16,
+  },
+  winUnit: {
+    marginLeft: 6,
+    marginBottom: 9,
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FBBF24',
+  },
+  loseIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(248,113,113,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  loseEyebrow: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#F87171',
+    letterSpacing: 2.5,
+    marginBottom: 2,
+  },
   outcomeTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '900',
     color: '#FFF',
     textAlign: 'center',
@@ -1095,7 +1254,8 @@ const styles = StyleSheet.create({
   outcomeBody: {
     marginTop: 8,
     fontSize: 14,
-    color: '#C4B5FD',
+    lineHeight: 20,
+    color: '#CBD5E1',
     textAlign: 'center',
     marginBottom: 16,
   },
@@ -1115,7 +1275,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    minHeight: 48,
+    minHeight: 50,
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
@@ -1129,69 +1289,117 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#fff',
   },
+
+  // Cards (legend + history)
+  card: {
+    marginTop: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    backgroundColor: CARD_BG,
+    padding: 14,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+  },
+  cardTitle: {
+    color: '#F8FAFC',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  legendWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  legendChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendDotMuted: { backgroundColor: '#334155' },
+  legendText: { color: '#E2E8F0', fontSize: 12, fontWeight: '700' },
+  legendTextMuted: { color: '#94A3B8' },
   footerHint: {
     marginTop: 18,
     textAlign: 'center',
     fontSize: 11,
-    color: 'rgba(255,255,255,0.45)',
+    color: 'rgba(148,163,184,0.7)',
     lineHeight: 16,
-  },
-  historyCard: {
-    marginTop: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(251,191,36,0.22)',
-    backgroundColor: 'rgba(20,14,36,0.7)',
-    padding: 14,
-    gap: 10,
   },
   historyHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 8,
-  },
-  historyTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
+    marginBottom: 6,
   },
   claimedBadge: {
-    backgroundColor: 'rgba(74,222,128,0.15)',
+    backgroundColor: 'rgba(74,222,128,0.12)',
     borderWidth: 1,
     borderColor: 'rgba(74,222,128,0.35)',
     borderRadius: 999,
     paddingVertical: 4,
     paddingHorizontal: 10,
+    flexShrink: 1,
   },
   claimedBadgeText: {
     color: '#bbf7d0',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
+  historyEmptyWrap: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 6,
+  },
   historyEmpty: {
-    color: '#c4b5fd',
+    color: '#94A3B8',
     fontSize: 13,
+    textAlign: 'center',
   },
   historyRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(148,163,184,0.18)',
+  },
+  historyRowLast: {
+    borderBottomWidth: 0,
+  },
+  historyIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
   historyLeft: {
     flex: 1,
+    minWidth: 0,
     paddingRight: 10,
   },
   historyLabel: {
-    color: '#fff',
+    color: '#F8FAFC',
     fontSize: 14,
     fontWeight: '700',
   },
   historyDate: {
-    color: '#a78bfa',
+    color: '#64748B',
     fontSize: 11,
     marginTop: 2,
   },
@@ -1199,41 +1407,45 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   historyAmount: {
-    color: '#fde68a',
+    color: '#FDE68A',
     fontSize: 13,
     fontWeight: '800',
+  },
+  historyAmountLost: {
+    color: '#64748B',
   },
   historyStatus: {
     marginTop: 2,
     fontSize: 11,
     fontWeight: '700',
   },
-  historyStatusClaimed: {
-    color: '#4ade80',
-  },
-  historyStatusPending: {
-    color: '#f59e0b',
-  },
-  historyStatusLost: {
-    color: '#f87171',
-  },
+
+  // Mining lock
   miningLockOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 50,
-    backgroundColor: 'rgba(10,4,22,0.82)',
+    backgroundColor: 'rgba(5,9,20,0.86)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
   },
   miningLockCard: {
-    backgroundColor: 'rgba(30,14,54,0.97)',
+    backgroundColor: '#0f172a',
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: 'rgba(251,191,36,0.45)',
-    padding: 28,
+    padding: 26,
     alignItems: 'center',
     gap: 12,
     width: '100%',
+  },
+  miningLockIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(251,191,36,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   miningLockTitle: {
     fontSize: 20,
@@ -1244,7 +1456,7 @@ const styles = StyleSheet.create({
   },
   miningLockBody: {
     fontSize: 14,
-    color: '#C4B5FD',
+    color: '#CBD5E1',
     textAlign: 'center',
     lineHeight: 20,
   },
