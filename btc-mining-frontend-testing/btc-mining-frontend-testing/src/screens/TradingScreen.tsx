@@ -5,7 +5,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import BitPlayLoader from '../components/BitPlayLoader';
 import { BANNER_ADS_ENABLED } from '../config/adPlacements';
 import {
   Alert,
@@ -14,7 +13,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
-  Dimensions,
   Image,
   Linking,
   StatusBar,
@@ -32,44 +30,38 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Icon5 from 'react-native-vector-icons/FontAwesome5';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
-import Svg, { Line, Rect, Stop, Text as SvgText } from 'react-native-svg';
-import { LineChart } from 'react-native-wagmi-charts';
 
 import { useRewardedVideoAd } from '../services/googleAds';
 import { DEFAULT_ADMOB_BANNER_ID } from '../services/adUnitDefaults';
 import { BannerAdWithGamFallback } from '../components/ads/BannerAdWithGamFallback';
 import { BannerAdSize } from 'react-native-google-mobile-ads';
 import { useAdConfig } from '../providers/AdConfigProvider';
-import { useBinanceMarkets, LinePoint } from '../hooks/useBinanceMarkets';
+import { useBinanceMarkets } from '../hooks/useBinanceMarkets';
+import { GameLineChart } from '../components/games/trading/TradeChart';
+import {
+  CountdownRing,
+  DirectionButton,
+  LiveBadge,
+  LivePrice,
+  PulsingIcon,
+  StatTile,
+  TradeHistoryRow,
+} from '../components/games/trading/TradeWidgets';
+import {
+  T,
+  SCREEN_W,
+  SCREEN_H,
+  IS_SMALL,
+  PAD,
+  formatUsd,
+  formatSignedUsd,
+} from '../components/games/trading/theme';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const IS_SMALL_DEVICE = SCREEN_W < 380;
-const PAD = IS_SMALL_DEVICE ? 12 : 16;
-
-const UP_COLOR = '#39FF9D';
-const DOWN_COLOR = '#FF4D8D';
-const GOLD = '#FFD93D';
-const CYAN = '#2EE8FF';
 export const WIN_GH_REWARD = 5;
+/** Length of one prediction round. */
+const TRADE_DURATION_MS = 60_000;
+const TRADE_SECONDS = TRADE_DURATION_MS / 1000;
 const CHART_VIEW_WINDOW_MS = 2 * 60 * 1000;
-const CHART_LINE_COLOR = '#FFFFFF';
-const PRICE_LABEL_W = 70;
-
-function clampNum(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v));
-}
-
-function roundCoord(n: number) {
-  return Math.round(n * 100) / 100;
-}
 
 type Direction = 'up' | 'down';
 
@@ -94,292 +86,17 @@ type RewardHistoryItem = {
   claimed?: boolean;
 };
 
-function formatUsd(n: number) {
-  return n.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString();
-}
-
-function formatCountdown(ms: number) {
-  const totalSec = Math.max(0, Math.ceil(ms / 1000));
-  const hrs = String(Math.floor(totalSec / 3600)).padStart(2, '0');
-  const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
-  const secs = String(totalSec % 60).padStart(2, '0');
-  return { hrs, mins, secs };
-}
-
-function generatePriceTicks(lo: number, hi: number, _maxTicks: number): number[] {
-  const range = hi - lo;
-  if (range <= 0 || !Number.isFinite(range)) return [];
-  const step = 2;
-  const ticks: number[] = [];
-  const start = Math.ceil(lo / step) * step;
-  for (let v = start; v <= hi; v += step) {
-    ticks.push(v);
-  }
-  return ticks;
-}
-
-function formatPriceLabel(price: number): string {
-  if (price >= 1000) return price.toFixed(2);
-  if (price >= 1) return price.toFixed(3);
-  return price.toFixed(5);
-}
-
-const WAGMI_GUTTER = 8;
-const WAGMI_RESERVED_H = 40;
-
-const GameLineChart = React.memo(function GameLineChart({
-  points,
-  width: totalWidth,
-  height,
-  domain,
-  nowMs,
-  windowMs,
-  entryPrice,
-  exitPrice,
-  lastPrice: chartLastPrice,
-}: {
-  points: LinePoint[];
-  width: number;
-  height: number;
-  domain: [number, number];
-  nowMs: number;
-  windowMs: number;
-  entryPrice: number | null;
-  exitPrice: number | null;
-  lastPrice?: number;
-}) {
-  const chartW = totalWidth - PRICE_LABEL_W;
-  const [yMin, yMax] = domain;
-  const priceTicks = useMemo(() => generatePriceTicks(yMin, yMax, 14), [yMin, yMax]);
-  const verticalLineCount = 8;
-
-  const chartData = useMemo(() => {
-    const tLeft = nowMs - windowMs;
-    return points
-      .filter((p) => p.timestamp >= tLeft && p.timestamp <= nowMs)
-      .sort((a, b) => a.timestamp - b.timestamp);
-  }, [points, nowMs, windowMs]);
-
-  const valueToY = useCallback(
-    (value: number) => {
-      const drawH = height;
-      const norm = (value - yMin) / (yMax - yMin || 1);
-      return WAGMI_GUTTER + (1 - norm) * (drawH - 2 * WAGMI_GUTTER);
-    },
-    [height, yMin, yMax]
-  );
-
-  if (!chartData.length) {
-    return (
-      <View style={[styles.chartFrame, styles.chartLoadingBox, { width: totalWidth, height }]}>
-        <BitPlayLoader size="lg" label="Loading chart data…" color={CYAN} />
-      </View>
-    );
-  }
-
-  const lastIdx = chartData.length - 1;
-
-  return (
-    <View style={[styles.chartFrame, { width: totalWidth, height }]}>
-      {/* Wagmi chart */}
-      <View style={{ width: chartW, height, overflow: 'hidden' }}>
-        <LineChart.Provider data={chartData} yRange={{ min: yMin, max: yMax }}>
-          <LineChart
-            width={chartW}
-            height={height + WAGMI_RESERVED_H}
-            yGutter={WAGMI_GUTTER}
-          >
-            <LineChart.Path color={CHART_LINE_COLOR} width={1.8}>
-              <LineChart.Gradient color={CHART_LINE_COLOR}>
-                <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={0.18} />
-                <Stop offset="40%" stopColor="#FFFFFF" stopOpacity={0.08} />
-                <Stop offset="100%" stopColor="#FFFFFF" stopOpacity={0} />
-              </LineChart.Gradient>
-              <LineChart.Dot
-                at={lastIdx}
-                color={CYAN}
-                size={4}
-                hasOuterDot
-                outerDotProps={{ fill: CYAN, opacity: 0.2 }}
-                outerSize={12}
-              />
-            </LineChart.Path>
-          </LineChart>
-        </LineChart.Provider>
-      </View>
-
-      {/* SVG overlay for grid, labels, entry/exit lines */}
-      <Svg
-        width={totalWidth}
-        height={height}
-        style={{ position: 'absolute', left: 0, top: 0 }}
-        pointerEvents="none"
-      >
-        {/* Horizontal grid lines */}
-        {priceTicks.map((tick, i) => {
-          const y = roundCoord(valueToY(tick));
-          if (y < 2 || y > height - 2) return null;
-          return (
-            <Line
-              key={`hg-${i}`}
-              x1={0}
-              y1={y}
-              x2={chartW}
-              y2={y}
-              stroke="rgba(255,255,255,0.10)"
-              strokeWidth={0.5}
-            />
-          );
-        })}
-
-        {/* Vertical grid lines */}
-        {Array.from({ length: verticalLineCount }).map((_, i) => {
-          const x = roundCoord(((i + 1) / (verticalLineCount + 1)) * chartW);
-          return (
-            <Line
-              key={`vg-${i}`}
-              x1={x}
-              y1={0}
-              x2={x}
-              y2={height}
-              stroke="rgba(255,255,255,0.10)"
-              strokeWidth={0.5}
-            />
-          );
-        })}
-
-        {/* Price label separator */}
-        <Line
-          x1={chartW}
-          y1={0}
-          x2={chartW}
-          y2={height}
-          stroke="rgba(255,255,255,0.15)"
-          strokeWidth={0.5}
-        />
-
-        {/* Entry price line */}
-        {entryPrice != null && (() => {
-          const y = roundCoord(valueToY(entryPrice));
-          return (
-            <>
-              <Line
-                x1={0} y1={y} x2={chartW} y2={y}
-                stroke={GOLD} strokeWidth={1} strokeDasharray="6 4"
-              />
-              <Rect
-                x={chartW + 2}
-                y={clampNum(y - 9, 2, height - 20)}
-                width={PRICE_LABEL_W - 4}
-                height={18}
-                rx={3} ry={3}
-                fill="rgba(255,217,61,0.25)"
-              />
-              <SvgText
-                x={chartW + 6}
-                y={clampNum(y - 9, 2, height - 20) + 13}
-                fill={GOLD} fontSize={9} fontWeight="700"
-              >
-                {formatPriceLabel(entryPrice)}
-              </SvgText>
-            </>
-          );
-        })()}
-
-        {/* Exit price line */}
-        {exitPrice != null && (() => {
-          const y = roundCoord(valueToY(exitPrice));
-          return (
-            <>
-              <Line
-                x1={0} y1={y} x2={chartW} y2={y}
-                stroke={CYAN} strokeWidth={1} strokeDasharray="4 4" opacity={0.85}
-              />
-              <Rect
-                x={chartW + 2}
-                y={clampNum(y - 9, 2, height - 20)}
-                width={PRICE_LABEL_W - 4}
-                height={18}
-                rx={3} ry={3}
-                fill="rgba(46,232,255,0.25)"
-              />
-              <SvgText
-                x={chartW + 6}
-                y={clampNum(y - 9, 2, height - 20) + 13}
-                fill={CYAN} fontSize={9} fontWeight="700"
-              >
-                {formatPriceLabel(exitPrice)}
-              </SvgText>
-            </>
-          );
-        })()}
-
-        {/* Right-side price labels */}
-        {priceTicks.map((tick, i) => {
-          const y = roundCoord(valueToY(tick));
-          if (y < 8 || y > height - 8) return null;
-          return (
-            <SvgText
-              key={`pl-${i}`}
-              x={chartW + 6}
-              y={y + 4}
-              fill="rgba(255,255,255,0.5)"
-              fontSize={9}
-              fontWeight="500"
-            >
-              {formatPriceLabel(tick)}
-            </SvgText>
-          );
-        })}
-
-        {/* Live price badge */}
-        {chartLastPrice != null && chartLastPrice > 0 && (() => {
-          const y = roundCoord(valueToY(chartLastPrice));
-          if (y < 0 || y > height) return null;
-          return (
-            <>
-              <Line
-                x1={chartW - 6} y1={y} x2={chartW} y2={y}
-                stroke={CYAN} strokeWidth={2}
-              />
-              <Rect
-                x={chartW + 1}
-                y={clampNum(y - 10, 2, height - 22)}
-                width={PRICE_LABEL_W - 3}
-                height={20}
-                rx={4} ry={4}
-                fill="rgba(46,232,255,0.2)"
-                stroke={CYAN}
-                strokeWidth={1}
-              />
-              <SvgText
-                x={chartW + 5}
-                y={clampNum(y - 10, 2, height - 22) + 14}
-                fill={CYAN} fontSize={10} fontWeight="800"
-              >
-                {formatPriceLabel(chartLastPrice)}
-              </SvgText>
-            </>
-          );
-        })()}
-      </Svg>
-    </View>
-  );
-});
+const CHART_W = SCREEN_W - PAD * 2 - 2; // card border
+const CHART_H = IS_SMALL
+  ? Math.round(Math.max(150, Math.min(SCREEN_H * 0.26, 200)))
+  : Math.round(Math.max(190, Math.min(SCREEN_H * 0.28, 280)));
 
 export default function TradingScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { ads } = useAdConfig();
   const { user } = useAuth();
-  const { linePoints, lastPrice, lastPriceRef, connected, lineDomain } =
+  const { linePoints, lastPrice, lastPriceRef, connected } =
     useBinanceMarkets();
 
   const { isMiningActive: storeMiningActive } = useHashPower();
@@ -447,30 +164,14 @@ export default function TradingScreen() {
   const loseAdCompletedRef = useRef(false);
   const pendingSavePromiseRef = useRef<Promise<void>>(Promise.resolve());
 
-  const chartW = SCREEN_W - PAD * 2;
-  const chartH = IS_SMALL_DEVICE
-    ? Math.min(SCREEN_H * 0.35, 280)
-    : Math.min(SCREEN_H * 0.40, 360);
-
   const entryPrice = activeTrade?.entryPrice ?? lineMarkers?.entry ?? null;
   const exitPrice = lineMarkers?.exit ?? null;
 
   const priceReady = displayPrice > 0;
 
-  const [, setChartClock] = useState(0);
-  const chartNowMs = Date.now();
-
-  const tRChart = chartNowMs;
-  const tLChart = tRChart - CHART_VIEW_WINDOW_MS;
-  const windowVals = linePoints
-    .filter((p) => p.timestamp >= tLChart && p.timestamp <= tRChart)
-    .map((p) => p.value);
-  const chartPriceDomain: [number, number] = (() => {
-    const curPrice = lastPrice ?? displayPrice ?? (windowVals.length ? windowVals[windowVals.length - 1] : null);
-    if (curPrice == null || !Number.isFinite(curPrice)) return lineDomain;
-    const half = 20;
-    return [curPrice - half, curPrice + half];
-  })();
+  // Right edge of the chart's time window. Advanced on a slow (500 ms) clock
+  // so the chart isn't re-filtered on every price tick.
+  const [chartNowMs, setChartNowMs] = useState(() => Date.now());
 
   const sessionOpen = useMemo(() => {
     if (linePoints.length === 0) return displayPrice || lastPrice;
@@ -667,7 +368,8 @@ export default function TradingScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const id = setInterval(() => setChartClock((c) => c + 1), 500);
+      setChartNowMs(Date.now());
+      const id = setInterval(() => setChartNowMs(Date.now()), 500);
       return () => clearInterval(id);
     }, [])
   );
@@ -701,7 +403,7 @@ export default function TradingScreen() {
       const entry = lastPriceRef.current || displayPrice || lastPrice;
       if (!entry || entry <= 0) return;
       const now = Date.now();
-      const ms = 60_000;
+      const ms = TRADE_DURATION_MS;
       const end = now + ms;
       setLineMarkers(null);
       const trade: ActiveTrade = {
@@ -728,6 +430,7 @@ export default function TradingScreen() {
       displayPrice,
       clearTimers,
       lastPriceRef,
+      isMiningActive,
     ]
   );
 
@@ -754,7 +457,7 @@ export default function TradingScreen() {
   const countdownMs = !activeTrade
     ? 0
     : Math.max(0, activeTrade.endTime - Date.now());
-  const countdown = formatCountdown(countdownMs);
+  const secondsLeft = Math.max(0, Math.ceil(countdownMs / 1000));
 
   const isCurrentlyCorrect = useMemo(() => {
     if (!activeTrade || !displayPrice) return false;
@@ -806,16 +509,41 @@ export default function TradingScreen() {
     }
   }, [rewardLoaded, showRewardAd]);
 
+  const tradeStats = useMemo(() => {
+    const total = rewardHistory.length;
+    const wins = rewardHistory.filter((h) => h.won).length;
+    return { total, wins, rate: total ? Math.round((wins / total) * 100) : null };
+  }, [rewardHistory]);
+
+  /* ─── derived view values ─── */
   const up = priceReady && vsSession >= 0;
+  const sessionPct =
+    priceReady && sessionOpen > 0 ? (vsSession / sessionOpen) * 100 : 0;
+  const trendColor = up ? T.up : T.down;
+
+  const livePnl = activeTrade
+    ? floatingPnl ??
+      (priceReady
+        ? (activeTrade.direction === 'up' ? 1 : -1) * (displayPrice - activeTrade.entryPrice)
+        : 0)
+    : 0;
+  const tradeColor = isCurrentlyCorrect ? T.up : T.down;
+  const chartColor = tradeActive ? tradeColor : T.cyan;
+  const pnlColor = livePnl > 0 ? T.up : livePnl < 0 ? T.down : T.textDim;
+
+  const loseMove = loseModal ? loseModal.exitPrice - loseModal.entryPrice : 0;
+  const loseRetryBusy = freeRetry.left === 0 && rewardAdLoading && !rewardLoaded;
 
   return (
-    <View style={styles.flex1}>
+    <View style={styles.root}>
       <StatusBar barStyle="light-content" />
       <View style={styles.flex1}>
         {isMiningActive === false && (
           <View style={styles.miningLockOverlay} pointerEvents="box-none">
             <View style={styles.miningLockCard}>
-              <Icon name="pickaxe" size={36} color="#FBBF24" />
+              <View style={styles.miningLockIcon}>
+                <Icon name="pickaxe" size={32} color={T.gold} />
+              </View>
               <Text style={styles.miningLockTitle}>Mining Not Active</Text>
               <Text style={styles.miningLockBody}>
                 Start mining on the home screen to unlock BTC Trading.
@@ -826,6 +554,7 @@ export default function TradingScreen() {
             </View>
           </View>
         )}
+
         {/* Top bar */}
         <View style={[styles.topBar, { paddingTop: Platform.OS === 'ios' ? insets.top : insets.top + 8 }]}>
           <TouchableOpacity
@@ -833,10 +562,15 @@ export default function TradingScreen() {
             style={styles.backBtn}
             hitSlop={14}
           >
-            <Icon name="arrow-left" size={24} color="#FFF" />
+            <Icon name="arrow-left" size={22} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.topBarTitle}>BTC Trading</Text>
-          <View style={{ width: 40 }} />
+          <View style={styles.topBarTitleCol}>
+            <Text style={styles.topBarTitle}>BTC Trading</Text>
+            <Text style={styles.topBarSub}>Predict · Win GH/s</Text>
+          </View>
+          <View style={styles.topBarRight}>
+            <LiveBadge live={connected} />
+          </View>
         </View>
 
         {/* Top banner ad — same placement as GameZoneScreen: directly below
@@ -851,237 +585,232 @@ export default function TradingScreen() {
           </View>
         )}
 
-        {!tradeActive ? (
-          /* ─── IDLE STATE: Main question screen ─── */
-          <ScrollView
-            style={styles.flex1}
-            contentContainerStyle={styles.idleContent}
-            showsVerticalScrollIndicator={false}
-            bounces={Platform.OS === 'ios'}
-          >
-            <Text style={styles.questionText}>
-              Will Bitcoin price go up or down{'\n'}in next one Minute?
-            </Text>
-
-            <View style={styles.priceRow}>
-              <Icon5 name="bitcoin" size={32} color="#F7931A" />
-              <Text style={styles.priceText}>
-                {priceReady ? `$${formatUsd(displayPrice)}` : 'Loading...'}
-              </Text>
-            </View>
-
-
-            {/* Chart section */}
-            <View style={styles.chartSection}>
-              <GameLineChart
-                points={linePoints}
-                width={chartW}
-                height={chartH}
-                domain={chartPriceDomain}
-                nowMs={chartNowMs}
-                windowMs={CHART_VIEW_WINDOW_MS}
-                entryPrice={entryPrice}
-                exitPrice={exitPrice}
-                lastPrice={displayPrice}
-              />
-            </View>
-
-            {/* UP/DOWN buttons */}
-            <View style={styles.directionBtnRow}>
-              <TouchableOpacity
-                style={styles.downButton}
-                onPress={() => startTrade('down')}
-                disabled={disabled || !priceReady}
-                activeOpacity={0.85}
-              >
-                <Icon name="menu-down" size={22} color="#FFF" />
-                <Text style={styles.dirBtnText}>Going Down</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.upButton}
-                onPress={() => startTrade('up')}
-                disabled={disabled || !priceReady}
-                activeOpacity={0.85}
-              >
-                <Icon name="menu-up" size={22} color="#FFF" />
-                <Text style={styles.dirBtnText}>Going Up</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Mining Power Bonus card */}
-            {stockGameBonus > 0 && (
-              <View style={styles.bonusCard}>
-                <View style={styles.bonusRow}>
-                  <Icon name="pickaxe" size={18} color={CYAN} />
-                  <Text style={styles.bonusLabel}>Mining Power Bonus</Text>
+        <ScrollView
+          style={styles.flex1}
+          contentContainerStyle={[styles.content, { paddingBottom: 96 + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+          bounces={Platform.OS === 'ios'}
+        >
+          {/* ─── Market card: price header + chart ─── */}
+          <View style={styles.marketCard}>
+            <View style={styles.marketHeader}>
+              <View style={styles.coinIcon}>
+                <Icon5 name="bitcoin" size={IS_SMALL ? 18 : 20} color={T.btc} />
+              </View>
+              <View style={styles.coinNameCol}>
+                <Text style={styles.coinName}>Bitcoin</Text>
+                <Text style={styles.coinPair}>BTC / USDT</Text>
+              </View>
+              {priceReady && (
+                <View
+                  style={[
+                    styles.changeChip,
+                    { backgroundColor: up ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.14)' },
+                  ]}
+                >
+                  <Icon name={up ? 'menu-up' : 'menu-down'} size={18} color={trendColor} />
+                  <Text style={[styles.changeChipText, { color: trendColor }]}>
+                    {Math.abs(sessionPct).toFixed(3)}%
+                  </Text>
                 </View>
-                <Text style={styles.bonusValue}>+{stockGameBonus.toFixed(1)} GH/s</Text>
-                <Text style={styles.bonusReset}>Resets at 12:00 AM</Text>
-              </View>
-            )}
-
-            {/* Reward History */}
-            <View style={styles.historyCard}>
-              <View style={styles.historyHeader}>
-                <Icon name="history" size={16} color={GOLD} />
-                <Text style={styles.historyTitle}>Reward History</Text>
-              </View>
-              {historyLoading ? (
-                <Text style={styles.historyEmpty}>Loading history…</Text>
-              ) : rewardHistory.length === 0 ? (
-                <Text style={styles.historyEmpty}>No trades yet. Make your first prediction!</Text>
-              ) : (
-                rewardHistory.slice(0, 8).map((item) => (
-                  <View key={item.id} style={styles.historyRow}>
-                    <View style={styles.historyRowLeft}>
-                      <Text style={styles.historyRowMain} numberOfLines={1}>
-                        {item.direction.toUpperCase()} • {item.durationLabel}
-                      </Text>
-                      <Text style={styles.historyRowSub} numberOfLines={1}>
-                        ${formatUsd(item.entryPrice)} → ${formatUsd(item.exitPrice)}
-                      </Text>
-                    </View>
-                    <View style={styles.historyRowRight}>
-                      {item.won ? (
-                        item.claimed ? (
-                          <>
-                            <Text style={styles.historyWin}>+{WIN_GH_REWARD} GH/s</Text>
-                            <Text style={styles.historyClaimedLabel}>CLAIMED</Text>
-                          </>
-                        ) : (
-                          <TouchableOpacity
-                            style={styles.historyClaimBtn}
-                            onPress={() => handleClaimFromHistory(item.id)}
-                            activeOpacity={0.8}
-                          >
-                            <Text style={styles.historyClaimBtnText}>Claim {WIN_GH_REWARD} GH/s</Text>
-                          </TouchableOpacity>
-                        )
-                      ) : (
-                        <Text style={styles.historyLost}>LOST</Text>
-                      )}
-                      <Text style={styles.historyTime}>{formatTime(item.earnedAt)}</Text>
-                    </View>
-                  </View>
-                ))
               )}
             </View>
 
-            <View style={{ height: 80 }} />
-          </ScrollView>
-        ) : (
-          /* ─── ACTIVE TRADE STATE ─── */
-          <ScrollView
-            style={styles.flex1}
-            contentContainerStyle={styles.activeContent}
-            showsVerticalScrollIndicator={false}
-            bounces={Platform.OS === 'ios'}
-          >
-            {/* Countdown timer */}
-            <View style={styles.countdownSection}>
-              <Image
-                source={require('../assets/images/bitcoin.png')}
-                style={styles.activeTradeImage}
-                resizeMode="contain"
-              />
-              <View style={styles.timerRow}>
-                <View style={styles.timerBox}>
-                  <Text style={styles.timerDigit}>{countdown.hrs}</Text>
+            <View style={styles.priceBlock}>
+              {priceReady ? (
+                <LivePrice price={displayPrice} size={IS_SMALL ? 30 : 36} />
+              ) : (
+                <View style={styles.priceSkeletonRow}>
+                  <ActivityIndicator color={T.cyan} size="small" />
+                  <Text style={styles.priceSkeletonText}>Fetching live price…</Text>
                 </View>
-                <Text style={styles.timerColon}>:</Text>
-                <View style={styles.timerBox}>
-                  <Text style={styles.timerDigit}>{countdown.mins}</Text>
-                </View>
-                <Text style={styles.timerColon}>:</Text>
-                <View style={styles.timerBox}>
-                  <Text style={styles.timerDigit}>{countdown.secs}</Text>
-                </View>
-              </View>
+              )}
+              {priceReady && (
+                <Text style={styles.priceSub}>
+                  <Text style={{ color: trendColor, fontWeight: '800' }}>
+                    {formatSignedUsd(vsSession)}
+                  </Text>
+                  {'  this session'}
+                </Text>
+              )}
             </View>
 
-            {/* Direction text */}
-            <Text style={styles.directionLabel}>
-              You said Bitcoin is going{' '}
-              <Text style={{ color: activeTrade.direction === 'up' ? UP_COLOR : DOWN_COLOR }}>
-                {activeTrade.direction === 'up' ? 'up' : 'down'}
-              </Text>
-            </Text>
+            <GameLineChart
+              points={linePoints}
+              width={CHART_W}
+              height={CHART_H}
+              nowMs={chartNowMs}
+              windowMs={CHART_VIEW_WINDOW_MS}
+              lastPrice={displayPrice}
+              entryPrice={entryPrice}
+              exitPrice={exitPrice}
+              color={chartColor}
+            />
+            <View style={styles.chartFooter}>
+              <Text style={styles.chartFooterText}>Last 2 min</Text>
+              <Text style={styles.chartFooterText}>Binance · real-time</Text>
+            </View>
+          </View>
 
-            {/* Forecast status banner */}
+          {!tradeActive ? (
+            /* ─── IDLE: make a prediction ─── */
+            <>
+              <View style={styles.howRow}>
+                <View style={styles.howIcon}>
+                  <Icon name="lightning-bolt" size={14} color={T.gold} />
+                </View>
+                <Text style={styles.howText}>
+                  Will BTC go <Text style={{ color: T.up, fontWeight: '900' }}>UP</Text> or{' '}
+                  <Text style={{ color: T.down, fontWeight: '900' }}>DOWN</Text> in the next{' '}
+                  {TRADE_SECONDS}s? Call it right to win{' '}
+                  <Text style={{ color: T.gold, fontWeight: '900' }}>+{WIN_GH_REWARD} GH/s</Text>
+                </Text>
+              </View>
+
+              <View style={styles.directionBtnRow}>
+                <DirectionButton
+                  direction="down"
+                  onPress={() => startTrade('down')}
+                  disabled={disabled || !priceReady}
+                />
+                <DirectionButton
+                  direction="up"
+                  onPress={() => startTrade('up')}
+                  disabled={disabled || !priceReady}
+                />
+              </View>
+              {!priceReady && (
+                <Text style={styles.waitingText}>Buttons unlock as soon as the live price arrives</Text>
+              )}
+            </>
+          ) : (
+            /* ─── ACTIVE TRADE ─── */
             <View
               style={[
-                styles.statusBanner,
-                isCurrentlyCorrect ? styles.statusCorrect : styles.statusIncorrect,
+                styles.tradeCard,
+                { borderColor: isCurrentlyCorrect ? 'rgba(34,197,94,0.45)' : 'rgba(239,68,68,0.45)' },
               ]}
             >
-              <Icon
-                name={isCurrentlyCorrect ? 'check-circle' : 'close-circle'}
-                size={22}
-                color="#FFF"
-                style={{ marginRight: 8 }}
-              />
-              <Text style={styles.statusText}>
-                {isCurrentlyCorrect
-                  ? 'Your forecast is currently correct'
-                  : 'Your forecast is currently incorrect'}
-              </Text>
-            </View>
+              <View style={styles.tradeTop}>
+                <CountdownRing
+                  endTime={activeTrade.endTime}
+                  durationMs={TRADE_DURATION_MS}
+                  secondsLeft={secondsLeft}
+                  color={tradeColor}
+                  size={IS_SMALL ? 74 : 86}
+                />
+                <View style={styles.tradeInfo}>
+                  <View style={styles.tradeChipsRow}>
+                    <View
+                      style={[
+                        styles.calledChip,
+                        {
+                          backgroundColor:
+                            activeTrade.direction === 'up' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                        },
+                      ]}
+                    >
+                      <Icon
+                        name={activeTrade.direction === 'up' ? 'arrow-up-bold' : 'arrow-down-bold'}
+                        size={12}
+                        color={activeTrade.direction === 'up' ? T.up : T.down}
+                      />
+                      <Text
+                        style={[
+                          styles.calledChipText,
+                          { color: activeTrade.direction === 'up' ? T.up : T.down },
+                        ]}
+                      >
+                        YOU CALLED {activeTrade.direction === 'up' ? 'UP' : 'DOWN'}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.pnlLabel}>Live P&L</Text>
+                  <Text style={[styles.pnlValue, { color: pnlColor }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {formatSignedUsd(livePnl)}
+                  </Text>
+                  <Text style={styles.entryText} numberOfLines={1}>
+                    Entry <Text style={{ color: T.gold, fontWeight: '800' }}>${formatUsd(activeTrade.entryPrice)}</Text>
+                  </Text>
+                </View>
+              </View>
 
-            {/* Stats row */}
-            {/* <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{WIN_GH_REWARD}</Text>
-                <Text style={styles.statLabel}>GH/s to win</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{activeTrade.durationLabel}</Text>
-                <Text style={styles.statLabel}>Duration</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>
-                  {activeTrade.direction === 'up' ? '▲' : '▼'}
+              <View
+                style={[
+                  styles.statusBar,
+                  { backgroundColor: isCurrentlyCorrect ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)' },
+                ]}
+              >
+                <Icon
+                  name={isCurrentlyCorrect ? 'check-circle' : 'alert-circle'}
+                  size={16}
+                  color={tradeColor}
+                />
+                <Text style={[styles.statusText, { color: tradeColor }]} numberOfLines={2}>
+                  {isCurrentlyCorrect
+                    ? `Winning — hold on for +${WIN_GH_REWARD} GH/s`
+                    : `Losing — needs to close ${activeTrade.direction === 'up' ? 'above' : 'below'} entry`}
                 </Text>
-                <Text style={styles.statLabel}>Direction</Text>
-              </View>
-            </View> */}
-
-            {/* Prices comparison */}
-            <View style={styles.pricesCompare}>
-              <View style={styles.priceCompareItem}>
-                <Text style={[styles.priceCompareValue, { color: isCurrentlyCorrect ? UP_COLOR : DOWN_COLOR }]}>
-                  ${formatUsd(displayPrice)}
-                </Text>
-                <Text style={styles.priceCompareLabel}>Current Price</Text>
-              </View>
-              <View style={styles.priceCompareItem}>
-                <Text style={[styles.priceCompareValue, { color: GOLD }]}>
-                  ${formatUsd(activeTrade.entryPrice)}
-                </Text>
-                <Text style={styles.priceCompareLabel}>Price at Forecast</Text>
               </View>
             </View>
+          )}
 
-            {/* Chart */}
-            <View style={styles.chartSection}>
-              <GameLineChart
-                points={linePoints}
-                width={chartW}
-                height={chartH}
-                domain={chartPriceDomain}
-                nowMs={chartNowMs}
-                windowMs={CHART_VIEW_WINDOW_MS}
-                entryPrice={entryPrice}
-                exitPrice={exitPrice}
-                lastPrice={displayPrice}
-              />
+          {/* ─── Stats ─── */}
+          <View style={styles.statsRow}>
+            <StatTile
+              icon="pickaxe"
+              iconColor={T.cyan}
+              label="Today's bonus"
+              value={`+${stockGameBonus.toFixed(1)} GH/s`}
+              valueColor={stockGameBonus > 0 ? T.cyan : undefined}
+            />
+            <StatTile
+              icon="percent"
+              iconColor={T.gold}
+              label="Win rate"
+              value={tradeStats.rate == null ? '—' : `${tradeStats.rate}%`}
+            />
+            <StatTile
+              icon="swap-vertical"
+              iconColor={T.textDim}
+              label="Trades"
+              value={`${tradeStats.wins}W · ${tradeStats.total - tradeStats.wins}L`}
+            />
+          </View>
+          <Text style={styles.resetNote}>Bonus mining power resets at 12:00 AM</Text>
+
+          {/* ─── Recent trades ─── */}
+          <View style={styles.historyCard}>
+            <View style={styles.historyHeader}>
+              <Icon name="history" size={16} color={T.gold} />
+              <Text style={styles.historyTitle}>Recent trades</Text>
             </View>
-
-            <View style={{ height: 80 }} />
-          </ScrollView>
-        )}
+            {historyLoading ? (
+              <View style={styles.historyEmptyBox}>
+                <ActivityIndicator color={T.textDim} size="small" />
+              </View>
+            ) : rewardHistory.length === 0 ? (
+              <View style={styles.historyEmptyBox}>
+                <Icon name="chart-areaspline" size={26} color={T.textMuted} />
+                <Text style={styles.historyEmpty}>No trades yet. Make your first prediction!</Text>
+              </View>
+            ) : (
+              rewardHistory.slice(0, 8).map((item) => (
+                <TradeHistoryRow
+                  key={item.id}
+                  direction={item.direction}
+                  entryPrice={item.entryPrice}
+                  exitPrice={item.exitPrice}
+                  earnedAt={item.earnedAt}
+                  won={item.won}
+                  claimed={item.claimed}
+                  reward={WIN_GH_REWARD}
+                  onClaim={() => handleClaimFromHistory(item.id)}
+                />
+              ))
+            )}
+          </View>
+        </ScrollView>
 
         {/* Banner ad - covers safe area like HomeScreen */}
         <View style={[styles.bannerWrapper, { paddingBottom: insets.bottom }]}>
@@ -1122,71 +851,87 @@ export default function TradingScreen() {
             showsVerticalScrollIndicator={false}
             bounces={false}
           >
-            <LinearGradient
-              colors={['#064E3B', '#065F46']}
-              style={styles.resultCard}
-            >
-              <View style={styles.resultIconCircle}>
-                <Icon name="trophy" size={48} color={GOLD} />
-              </View>
+            <View style={[styles.resultCard, { borderColor: 'rgba(34,197,94,0.4)' }]}>
+              <LinearGradient
+                colors={['rgba(34,197,94,0.28)', 'rgba(17,24,39,0)']}
+                style={styles.resultGlow}
+                pointerEvents="none"
+              />
+              <View style={styles.resultInner}>
+                <PulsingIcon glow="rgba(251,191,36,0.45)">
+                  <View style={[styles.resultIconCircle, { borderColor: 'rgba(251,191,36,0.5)' }]}>
+                    <Icon name="trophy" size={42} color={T.gold} />
+                  </View>
+                </PulsingIcon>
 
-              <Text style={styles.resultTitle}>You Won!</Text>
-              <Text style={styles.resultSub}>Your prediction was correct</Text>
+                <Text style={[styles.resultKicker, { color: T.up }]}>PREDICTION CORRECT</Text>
+                <Text style={styles.resultTitle}>You Won!</Text>
 
-              <View style={styles.resultRewardBox}>
-                <Icon name="pickaxe" size={20} color={CYAN} />
-                <Text style={styles.resultRewardText}>
-                  +{WIN_GH_REWARD} GH/s Mining Power
-                </Text>
-              </View>
-
-              <View style={styles.resultPriceRow}>
-                <View style={styles.resultPriceItem}>
-                  <Text style={styles.resultPriceLabel}>Entry Price</Text>
-                  <Text style={styles.resultPriceValue}>
-                    ${winModal ? formatUsd(winModal.entryPrice) : '—'}
-                  </Text>
+                <View style={styles.rewardPill}>
+                  <Icon name="pickaxe" size={20} color={T.gold} />
+                  <Text style={styles.rewardPillText}>+{WIN_GH_REWARD} GH/s</Text>
                 </View>
-                <Icon name="arrow-right" size={20} color="rgba(255,255,255,0.4)" />
-                <View style={styles.resultPriceItem}>
-                  <Text style={styles.resultPriceLabel}>Exit Price</Text>
-                  <Text style={[styles.resultPriceValue, { color: UP_COLOR }]}>
-                    ${winModal ? formatUsd(winModal.exitPrice) : '—'}
-                  </Text>
-                </View>
-              </View>
+                <Text style={styles.resultSub}>Mining power boost</Text>
 
-              <Text style={styles.resultNote}>
-                Added to your mining · resets at 12:00 AM
-              </Text>
-
-              <Text style={styles.modalAdHint}>
-                Watch a clip to claim your reward
-              </Text>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.lootBtn,
-                  pressed && styles.lootBtnPressed,
-                ]}
-                onPress={handleClaim}
-              >
-                {rewardAdLoading && !rewardLoaded ? (
-                  <View style={styles.lootBtnRow}>
-                    <ActivityIndicator color="#0A1628" size="small" />
-                    <Text style={[styles.lootBtnTxt, styles.lootBtnTxtPad]}>
-                      Loading video…
+                <View style={styles.resultPriceBox}>
+                  <View style={styles.resultPriceItem}>
+                    <Text style={styles.resultPriceLabel}>Entry</Text>
+                    <Text style={styles.resultPriceValue} numberOfLines={1} adjustsFontSizeToFit>
+                      ${winModal ? formatUsd(winModal.entryPrice) : '—'}
                     </Text>
                   </View>
-                ) : (
-                  <Text style={styles.lootBtnTxt}>CLAIM {WIN_GH_REWARD} GH/s</Text>
-                )}
-              </Pressable>
+                  <View style={styles.resultArrow}>
+                    <Icon
+                      name={winModal?.direction === 'down' ? 'arrow-bottom-right' : 'arrow-top-right'}
+                      size={18}
+                      color={T.up}
+                    />
+                  </View>
+                  <View style={styles.resultPriceItem}>
+                    <Text style={styles.resultPriceLabel}>Exit</Text>
+                    <Text style={[styles.resultPriceValue, { color: T.up }]} numberOfLines={1} adjustsFontSizeToFit>
+                      ${winModal ? formatUsd(winModal.exitPrice) : '—'}
+                    </Text>
+                  </View>
+                </View>
 
-              <TouchableOpacity onPress={closeRewardModal} hitSlop={12}>
-                <Text style={styles.skipTxt}>Skip</Text>
-              </TouchableOpacity>
-            </LinearGradient>
+                <Text style={styles.modalAdHint}>
+                  Watch a clip to claim your reward · resets at 12:00 AM
+                </Text>
+
+                <Pressable
+                  style={({ pressed }) => [styles.ctaOuter, pressed && styles.ctaPressed]}
+                  onPress={handleClaim}
+                >
+                  <LinearGradient
+                    colors={['#FDE68A', T.gold, '#F59E0B']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.ctaGradient}
+                  >
+                    <View style={styles.ctaInner}>
+                      {rewardAdLoading && !rewardLoaded ? (
+                        <>
+                          <ActivityIndicator color="#1C1407" size="small" />
+                          <Text style={[styles.ctaTextDark, styles.ctaTextPad]}>Loading video…</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Icon name="play-circle" size={20} color="#1C1407" />
+                          <Text style={[styles.ctaTextDark, styles.ctaTextPad]}>
+                            CLAIM {WIN_GH_REWARD} GH/s
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+
+                <TouchableOpacity onPress={closeRewardModal} hitSlop={12}>
+                  <Text style={styles.skipTxt}>Skip</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </ScrollView>
         </View>
       </Modal>
@@ -1201,62 +946,89 @@ export default function TradingScreen() {
         presentationStyle="overFullScreen"
       >
         <View style={styles.modalRoot}>
-          <View style={styles.modalScrollInner}>
-            <LinearGradient
-              colors={['#7F1D1D', '#991B1B']}
-              style={styles.resultCard}
-            >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollInner}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={[styles.resultCard, { borderColor: 'rgba(239,68,68,0.35)' }]}>
+              <LinearGradient
+                colors={['rgba(239,68,68,0.2)', 'rgba(17,24,39,0)']}
+                style={styles.resultGlow}
+                pointerEvents="none"
+              />
+              <View style={styles.resultInner}>
+                <PulsingIcon glow="rgba(239,68,68,0.35)">
+                  <View style={[styles.resultIconCircle, { borderColor: 'rgba(239,68,68,0.45)' }]}>
+                    <Icon name="arm-flex" size={40} color="#FCA5A5" />
+                  </View>
+                </PulsingIcon>
 
-              <View style={[styles.resultIconCircle, { backgroundColor: 'rgba(239,68,68,0.2)' }]}>
-                <Icon name="close-circle" size={48} color="#EF4444" />
-              </View>
-
-              <Text style={styles.resultTitle}>You Lost!</Text>
-              <Text style={styles.resultSub}>
-                Your prediction was{' '}
-                {loseModal?.direction === 'up' ? 'UP' : 'DOWN'} but the price went{' '}
-                {loseModal?.direction === 'up' ? 'DOWN' : 'UP'}
-              </Text>
-
-              <View style={styles.resultPriceRow}>
-                <View style={styles.resultPriceItem}>
-                  <Text style={styles.resultPriceLabel}>Entry Price</Text>
-                  <Text style={styles.resultPriceValue}>
-                    ${loseModal ? formatUsd(loseModal.entryPrice) : '—'}
+                <Text style={[styles.resultKicker, { color: T.down }]}>NOT THIS TIME</Text>
+                <Text style={styles.resultTitle}>So close!</Text>
+                <Text style={styles.resultSubWide}>
+                  You called{' '}
+                  <Text style={{ color: loseModal?.direction === 'up' ? T.up : T.down, fontWeight: '900' }}>
+                    {loseModal?.direction === 'up' ? 'UP' : 'DOWN'}
                   </Text>
+                  {loseMove === 0
+                    ? ', but the price ended flat.'
+                    : `, but the price moved ${loseMove > 0 ? 'UP' : 'DOWN'} $${formatUsd(Math.abs(loseMove))}.`}
+                </Text>
+
+                <View style={styles.resultPriceBox}>
+                  <View style={styles.resultPriceItem}>
+                    <Text style={styles.resultPriceLabel}>Entry</Text>
+                    <Text style={styles.resultPriceValue} numberOfLines={1} adjustsFontSizeToFit>
+                      ${loseModal ? formatUsd(loseModal.entryPrice) : '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.resultArrow}>
+                    <Icon
+                      name={loseMove > 0 ? 'arrow-top-right' : loseMove < 0 ? 'arrow-bottom-right' : 'arrow-right'}
+                      size={18}
+                      color={T.textDim}
+                    />
+                  </View>
+                  <View style={styles.resultPriceItem}>
+                    <Text style={styles.resultPriceLabel}>Exit</Text>
+                    <Text style={[styles.resultPriceValue, { color: T.down }]} numberOfLines={1} adjustsFontSizeToFit>
+                      ${loseModal ? formatUsd(loseModal.exitPrice) : '—'}
+                    </Text>
+                  </View>
                 </View>
-                <Icon name="arrow-right" size={20} color="rgba(255,255,255,0.4)" />
-                <View style={styles.resultPriceItem}>
-                  <Text style={styles.resultPriceLabel}>Exit Price</Text>
-                  <Text style={[styles.resultPriceValue, { color: DOWN_COLOR }]}>
-                    ${loseModal ? formatUsd(loseModal.exitPrice) : '—'}
-                  </Text>
-                </View>
+
+                <Text style={styles.resultNote}>
+                  Every round is a fresh {TRADE_SECONDS}-second chance. Your next call could be the winner!
+                </Text>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.retryBtn,
+                    pressed && styles.ctaPressed,
+                    loseRetryBusy && { opacity: 0.6 },
+                  ]}
+                  onPress={closeLoseModal}
+                  disabled={loseRetryBusy}
+                >
+                  {loseRetryBusy ? (
+                    <ActivityIndicator color="#0B0F17" size="small" />
+                  ) : (
+                    <View style={styles.ctaInnerRow}>
+                      <Icon
+                        name={freeRetry.left > 0 ? 'refresh' : 'play-circle'}
+                        size={19}
+                        color="#0B0F17"
+                      />
+                      <Text style={[styles.ctaTextDark, styles.ctaTextPad]}>
+                        {freeRetry.left > 0 ? `TRY AGAIN (${freeRetry.left} FREE)` : 'WATCH AD TO TRY AGAIN'}
+                      </Text>
+                    </View>
+                  )}
+                </Pressable>
               </View>
-
-              <Text style={styles.resultNote}>
-                Better luck next time! Try a different strategy.
-              </Text>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.tryAgainBtn,
-                  pressed && { opacity: 0.85 },
-                  (freeRetry.left === 0 && rewardAdLoading && !rewardLoaded) && { opacity: 0.6 }
-                ]}
-                onPress={closeLoseModal}
-                disabled={freeRetry.left === 0 && rewardAdLoading && !rewardLoaded}
-              >
-                {freeRetry.left === 0 && rewardAdLoading && !rewardLoaded ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <Text style={styles.tryAgainBtnTxt}>
-                    {freeRetry.left > 0 ? `TRY AGAIN (${freeRetry.left} FREE)` : 'WATCH AD TO TRY AGAIN'}
-                  </Text>
-                )}
-              </Pressable>
-            </LinearGradient>
-          </View>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -1264,283 +1036,187 @@ export default function TradingScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex1: { flex: 1, backgroundColor: '#111827' },
+  root: { flex: 1, backgroundColor: T.bg },
+  flex1: { flex: 1, backgroundColor: T.bg },
+
+  /* ─── TOP BAR ─── */
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingBottom: 10,
-    backgroundColor: '#1F2937',
+    backgroundColor: T.bg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: T.borderStrong,
   },
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: T.surface2,
   },
-  topBarTitle: {
-    flex: 1,
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
+  topBarTitleCol: { flex: 1, marginLeft: 12 },
+  topBarTitle: { color: T.text, fontSize: 17, fontWeight: '900' },
+  topBarSub: { color: T.textDim, fontSize: 11, fontWeight: '600', marginTop: 1 },
+  topBarRight: { marginLeft: 8 },
 
-  /* ─── IDLE STATE ─── */
-  idleContent: {
+  content: {
     flexGrow: 1,
     paddingHorizontal: PAD,
-    paddingTop: 24,
-    alignItems: 'center',
-  },
-  // Sized down from 22/26 so the headline fits on two lines instead of the
-  // three the old manual line breaks forced.
-  questionText: {
-    color: '#FFF',
-    fontSize: IS_SMALL_DEVICE ? 17 : 20,
-    fontWeight: '800',
-    textAlign: 'center',
-    lineHeight: IS_SMALL_DEVICE ? 24 : 28,
-    marginBottom: 16,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 10,
-  },
-  priceText: {
-    color: '#FFF',
-    fontSize: IS_SMALL_DEVICE ? 28 : 34,
-    fontWeight: '900',
-  },
-  minerImage: {
-    width: SCREEN_W * 0.5,
-    height: SCREEN_W * 0.5,
-    marginBottom: 8,
-    opacity: 0.9,
+    paddingTop: IS_SMALL ? 10 : 14,
   },
 
-  directionBtnRow: {
-    flexDirection: 'row',
-    width: '100%',
-    gap: 12,
-    marginTop: 16,
-    marginBottom: 16,
+  /* ─── MARKET CARD ─── */
+  marketCard: {
+    backgroundColor: T.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: T.border,
+    overflow: 'hidden',
   },
-  downButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
-    paddingVertical: 14,
-    gap: 6,
-  },
-  upButton: {
-    flex: 1,
+  marketHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4ADE80',
-    borderRadius: 12,
-    paddingVertical: 14,
-    gap: 6,
-  },
-  dirBtnText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-
-  /* ─── ACTIVE TRADE STATE ─── */
-  activeContent: {
-    flexGrow: 1,
-    paddingHorizontal: PAD,
+    paddingHorizontal: 14,
     paddingTop: 12,
-    alignItems: 'center',
   },
-  countdownSection: {
+  coinIcon: {
+    width: IS_SMALL ? 32 : 36,
+    height: IS_SMALL ? 32 : 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(247,147,26,0.14)',
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
     justifyContent: 'center',
   },
-  activeTradeImage: {
-    width: SCREEN_W * 0.1,
-    height: SCREEN_W * 0.15,
-    // marginBottom: 12,
-    opacity: 0.85,
-  },
-  timerRow: {
+  coinNameCol: { flex: 1, marginLeft: 10 },
+  coinName: { color: T.text, fontSize: 14, fontWeight: '800' },
+  coinPair: { color: T.textDim, fontSize: 11, fontWeight: '600', marginTop: 1 },
+  changeChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
-  timerBox: {
-    backgroundColor: '#F3F4F6',
     borderRadius: 8,
+    paddingLeft: 2,
+    paddingRight: 8,
+    paddingVertical: 3,
+  },
+  changeChipText: { fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  priceBlock: {
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    paddingBottom: 6,
+    minHeight: IS_SMALL ? 58 : 66,
+    justifyContent: 'center',
+  },
+  priceSkeletonRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  priceSkeletonText: { color: T.textDim, fontSize: 14, fontWeight: '700' },
+  priceSub: { color: T.textMuted, fontSize: 12, fontWeight: '600', marginTop: 1 },
+  chartFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    minWidth: 50,
-    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: T.border,
   },
-  timerDigit: {
-    color: '#111827',
-    fontSize: 24,
+  chartFooterText: { color: T.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+
+  /* ─── IDLE ─── */
+  howRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: IS_SMALL ? 10 : 14,
+    paddingHorizontal: 12,
+    paddingVertical: IS_SMALL ? 8 : 10,
+    backgroundColor: 'rgba(251,191,36,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.18)',
+    borderRadius: 12,
+  },
+  howIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  howText: { flex: 1, color: '#D1D5DB', fontSize: IS_SMALL ? 12 : 13, fontWeight: '600', lineHeight: IS_SMALL ? 17 : 19 },
+  directionBtnRow: {
+    flexDirection: 'row',
+    gap: IS_SMALL ? 10 : 12,
+    marginTop: IS_SMALL ? 10 : 14,
+  },
+  waitingText: {
+    color: T.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+
+  /* ─── ACTIVE TRADE ─── */
+  tradeCard: {
+    marginTop: IS_SMALL ? 10 : 14,
+    backgroundColor: T.surface,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: IS_SMALL ? 12 : 14,
+  },
+  tradeTop: { flexDirection: 'row', alignItems: 'center' },
+  tradeInfo: { flex: 1, marginLeft: IS_SMALL ? 12 : 16, minWidth: 0 },
+  tradeChipsRow: { flexDirection: 'row' },
+  calledChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    gap: 3,
+  },
+  calledChipText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  pnlLabel: { color: T.textDim, fontSize: 11, fontWeight: '700', marginTop: 6 },
+  pnlValue: {
+    fontSize: IS_SMALL ? 24 : 28,
     fontWeight: '900',
     fontVariant: ['tabular-nums'],
   },
-  timerColon: {
-    color: '#9CA3AF',
-    fontSize: 24,
-    fontWeight: '900',
-    marginHorizontal: 2,
-  },
-  directionLabel: {
-    color: '#4ADE80',
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 10,
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  statusBanner: {
+  entryText: { color: T.textDim, fontSize: 12, fontWeight: '600', marginTop: 1 },
+  statusBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
     borderRadius: 10,
-    width: '100%',
-    marginBottom: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 12,
+    gap: 8,
   },
-  statusCorrect: {
-    backgroundColor: '#059669',
-  },
-  statusIncorrect: {
-    backgroundColor: '#DC2626',
-  },
-  statusText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '700',
-    flex: 1,
-  },
+  statusText: { flex: 1, fontSize: 12, fontWeight: '800' },
+
+  /* ─── STATS & HISTORY ─── */
   statsRow: {
     flexDirection: 'row',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    width: '100%',
-    paddingVertical: 12,
-    marginBottom: 12,
+    gap: 8,
+    marginTop: IS_SMALL ? 12 : 16,
   },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    color: '#111827',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  statLabel: {
-    color: '#6B7280',
-    fontSize: 11,
+  resetNote: {
+    color: T.textMuted,
+    fontSize: 10,
     fontWeight: '600',
-    marginTop: 4,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 4,
-  },
-  pricesCompare: {
-    flexDirection: 'row',
-    width: '100%',
-    gap: 12,
-    marginBottom: 16,
-  },
-  priceCompareItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  priceCompareValue: {
-    fontSize: IS_SMALL_DEVICE ? 18 : 22,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  priceCompareLabel: {
-    color: '#9CA3AF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  /* ─── CHART ─── */
-  chartSection: {
-    width: '100%',
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  chartFrame: {
-    borderRadius: 4,
-    overflow: 'hidden',
-    backgroundColor: '#0A0F1A',
-  },
-  chartLoadingBox: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  chartLoading: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 14,
-    marginTop: 10,
-  },
-
-  /* ─── TIME SLOT MODAL ─── */
-  /* ─── BONUS & HISTORY ─── */
-  bonusCard: {
-    width: '100%',
-    marginTop: 12,
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: 'rgba(46,232,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(46,232,255,0.25)',
-    alignItems: 'center',
-  },
-  bonusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  bonusLabel: {
-    color: CYAN,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  bonusValue: {
-    color: '#FFF',
-    fontSize: IS_SMALL_DEVICE ? 18 : 22,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  bonusReset: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 11,
-    marginTop: 4,
-    fontWeight: '600',
+    marginTop: 6,
+    textAlign: 'center',
   },
   historyCard: {
-    width: '100%',
     marginTop: 12,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderRadius: 16,
+    backgroundColor: T.surface,
     borderWidth: 1,
-    borderColor: 'rgba(255,217,61,0.22)',
+    borderColor: T.border,
   },
   historyHeader: {
     flexDirection: 'row',
@@ -1548,73 +1224,21 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   historyTitle: {
-    color: '#FFF6D8',
-    fontSize: 13,
-    fontWeight: '800',
+    color: T.text,
+    fontSize: 14,
+    fontWeight: '900',
     marginLeft: 6,
   },
-  historyEmpty: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
-    paddingVertical: 8,
-  },
-  historyRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  historyEmptyBox: {
     alignItems: 'center',
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.12)',
+    paddingVertical: 18,
+    gap: 6,
   },
-  historyRowLeft: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  historyRowRight: {
-    alignItems: 'flex-end',
-    flexShrink: 0,
-  },
-  historyRowMain: {
-    color: '#FFFFFF',
+  historyEmpty: {
+    color: T.textDim,
     fontSize: 12,
-    fontWeight: '700',
-  },
-  historyRowSub: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  historyWin: {
-    color: UP_COLOR,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  historyClaimedLabel: {
-    color: UP_COLOR,
-    fontSize: 10,
-    fontWeight: '700',
-    marginTop: 1,
-  },
-  historyClaimBtn: {
-    backgroundColor: GOLD,
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-  },
-  historyClaimBtnText: {
-    color: '#1A0A2E',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  historyLost: {
-    color: DOWN_COLOR,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  historyTime: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 10,
-    marginTop: 1,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 
   /* ─── BANNER ─── */
@@ -1623,9 +1247,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#1F2937',
+    backgroundColor: T.surface,
     paddingHorizontal: 0,
     alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: T.border,
   },
   bannerContainer: {
     width: '100%',
@@ -1644,7 +1270,7 @@ const styles = StyleSheet.create({
   /* ─── WIN / LOSE MODALS ─── */
   modalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.78)',
+    backgroundColor: 'rgba(3,6,12,0.82)',
   },
   modalScrollInner: {
     flexGrow: 1,
@@ -1653,169 +1279,209 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 40,
   },
-
   resultCard: {
-    borderRadius: 22,
-    padding: Platform.OS === 'ios' ? 0 : 26,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    maxWidth: 400,
     width: '100%',
+    maxWidth: 400,
+    borderRadius: 24,
+    borderWidth: 1,
+    backgroundColor: T.surface,
+    overflow: 'hidden',
+  },
+  resultGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 200,
+  },
+  resultInner: {
     alignItems: 'center',
+    paddingHorizontal: IS_SMALL ? 18 : 24,
+    paddingTop: IS_SMALL ? 20 : 26,
+    paddingBottom: IS_SMALL ? 16 : 20,
   },
   resultIconCircle: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255,217,61,0.15)',
+    borderWidth: 1.5,
+    backgroundColor: T.surface2,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-    marginTop: Platform.OS === 'ios' ? 20 : 0,
   },
-  resultTitle: {
-    color: '#FFF',
-    fontSize: IS_SMALL_DEVICE ? 28 : 34,
+  resultKicker: {
+    fontSize: 11,
     fontWeight: '900',
-    textAlign: 'center',
+    letterSpacing: 1.6,
     marginBottom: 4,
   },
-  resultSub: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
+  resultTitle: {
+    color: T.text,
+    fontSize: IS_SMALL ? 26 : 30,
+    fontWeight: '900',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
   },
-  resultRewardBox: {
+  rewardPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(46,232,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(46,232,255,0.3)',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginBottom: 16,
     gap: 8,
+    backgroundColor: 'rgba(251,191,36,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.4)',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
   },
-  resultRewardText: {
-    color: CYAN,
-    fontSize: 16,
-    fontWeight: '800',
+  rewardPillText: {
+    color: T.gold,
+    fontSize: IS_SMALL ? 26 : 30,
+    fontWeight: '900',
   },
-  resultPriceRow: {
+  resultSub: {
+    color: T.textDim,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 6,
+    marginBottom: 16,
+  },
+  resultSubWide: {
+    color: '#D1D5DB',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  resultPriceBox: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    backgroundColor: T.bg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: T.border,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    marginBottom: 14,
   },
-  resultPriceItem: {
+  resultPriceItem: { flex: 1, alignItems: 'center', minWidth: 0 },
+  resultArrow: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: T.surface2,
     alignItems: 'center',
-    flex: 1,
-    minWidth: 0,
+    justifyContent: 'center',
+    marginHorizontal: 6,
   },
   resultPriceLabel: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 4,
+    color: T.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 3,
+    textTransform: 'uppercase',
   },
   resultPriceValue: {
-    color: '#FFF',
-    fontSize: IS_SMALL_DEVICE ? 16 : 18,
+    color: T.text,
+    fontSize: IS_SMALL ? 15 : 17,
     fontWeight: '900',
+    fontVariant: ['tabular-nums'],
   },
   resultNote: {
-    color: 'rgba(255,255,255,0.45)',
+    color: T.textDim,
     fontSize: 12,
     textAlign: 'center',
+    lineHeight: 17,
     marginBottom: 16,
   },
   modalAdHint: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 12,
+    color: T.textDim,
+    fontSize: 11,
     textAlign: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
-  lootBtn: {
-    backgroundColor: GOLD,
-    paddingVertical: 15,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 50,
-    width: Platform.OS === 'ios' ? '90%' : '100%',
-  },
-  lootBtnPressed: { opacity: 0.88 },
-  lootBtnRow: {
+  // Gradient carries only the width; padding lives on the inner View (iOS
+  // renders a padded LinearGradient shorter than its label).
+  ctaOuter: { width: '100%', borderRadius: 14, overflow: 'hidden' },
+  ctaGradient: { width: '100%' },
+  ctaInner: {
+    minHeight: 52,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  lootBtnTxt: { color: '#1A0A2E', fontSize: 16, fontWeight: '900' },
-  lootBtnTxtPad: { marginLeft: 10 },
-  tryAgainBtn: {
-    backgroundColor: '#FFF',
-    paddingVertical: 15,
+  ctaInnerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  ctaPressed: { opacity: 0.85 },
+  ctaTextDark: { color: '#1C1407', fontSize: 15, fontWeight: '900', letterSpacing: 0.4 },
+  ctaTextPad: { marginLeft: 8 },
+  retryBtn: {
+    width: '100%',
+    minHeight: 52,
+    paddingVertical: 14,
     borderRadius: 14,
+    backgroundColor: T.cyan,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 50,
-    width: Platform.OS === 'ios' ? '90%' : '100%',
-    marginBottom: Platform.OS === 'ios' ? 20 : 4,
-  },
-  tryAgainBtnTxt: {
-    color: '#991B1B',
-    fontSize: 16,
-    fontWeight: '900',
   },
   skipTxt: {
-    color: 'rgba(255,255,255,0.45)',
+    color: T.textMuted,
     textAlign: 'center',
     marginTop: 14,
-    marginBottom: Platform.OS === 'ios' ? 20 : 0,
     fontSize: 14,
+    fontWeight: '600',
     paddingVertical: 4,
   },
+
+  /* ─── MINING LOCK ─── */
   miningLockOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 50,
-    backgroundColor: 'rgba(5,2,14,0.82)',
+    backgroundColor: 'rgba(5,8,14,0.86)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
   },
   miningLockCard: {
-    backgroundColor: 'rgba(15,10,30,0.97)',
+    backgroundColor: T.surface,
     borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(251,191,36,0.45)',
-    padding: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.4)',
+    padding: 26,
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     width: '100%',
+    maxWidth: 400,
+  },
+  miningLockIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(251,191,36,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   miningLockTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#FFFFFF',
+    color: T.text,
     textAlign: 'center',
     marginTop: 4,
   },
   miningLockBody: {
     fontSize: 14,
-    color: '#C4B5FD',
+    color: T.textDim,
     textAlign: 'center',
     lineHeight: 20,
   },
   miningLockBtn: {
     marginTop: 8,
-    backgroundColor: '#FBBF24',
+    backgroundColor: T.gold,
     borderRadius: 12,
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 28,
     alignItems: 'center',
   },
   miningLockBtnText: {
