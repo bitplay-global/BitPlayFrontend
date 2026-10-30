@@ -302,6 +302,7 @@ const Page: React.FC = () => {
   const [localHashPower, setLocalHashPower] = useState(cachedHome?.localHashPower ?? 0);
   const [btcBalance, setBtcBalance] = useState(cachedHome?.btcBalance ?? 0); // Current session mining
   const [btcReferralBalance, setBtcRefBalance] = useState(cachedHome?.btcReferralBalance ?? 0);
+  const [referralBonusGh, setReferralBonusGh] = useState(0);
   const [userBalance, setUserWalletBalance] = useState(cachedHome?.userBalance ?? 0);
   const [userBalanceBTC, setUserBTCWalletBalance] = useState(cachedHome?.userBalanceBTC ?? 0); // Past accumulated mining (BTC_DEPOSIT)
   const [totalHistoricalBTC, setTotalHistoricalBTC] = useState(cachedHome?.totalHistoricalBTC ?? 0); // Sum from Balance History
@@ -1195,6 +1196,8 @@ const Page: React.FC = () => {
           // Referral balance for invite modal (same as My Profile)
           const refReward = referralRewardsData?.totalRewardsRaw ?? referralRewardsData?.totalRewards ?? 0;
           setBtcRefBalance(typeof refReward === 'number' ? refReward : parseFloat(refReward) || 0);
+          setReferralBonusGh(Number(referralRewardsData?.activeRewardGh) || 0);
+          setReferralBonusGh(Number(referralRewardsData?.activeRewardGh) || 0);
 
           const formatted_btc = formattedBTC(`${btcDeposited.toFixed(16)} BTC`);
 
@@ -2697,6 +2700,7 @@ const Page: React.FC = () => {
         onClose={() => setShowInviteModal(false)}
         referralCode={user?.referralCode || ''}
         invitationRewards={btcReferralBalance}
+        referralBonusGh={referralBonusGh}
         referralCount={user_referrals}
       />
 

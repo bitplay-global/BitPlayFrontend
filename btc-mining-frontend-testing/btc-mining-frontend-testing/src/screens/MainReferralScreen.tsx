@@ -107,7 +107,7 @@ const InternalReferralScreen: React.FC<InternalReferralScreenProps> = () => {
         default: 'https://bitplaypro.com/download',
       });
       const result = await Share.share({
-        message: `Join me on BitPlay Pro, the cloud mining app. Use my invitation code: ${userReferralCode}\n\nDownload the app: ${downloadUrl}`,
+        message: `Join me on BitPlay Pro, the Bitcoin rewards app. Use my invitation code: ${userReferralCode}\n\nDownload the app: ${downloadUrl}`,
         title: 'Join BitPlay Pro',
       });
 
@@ -216,13 +216,12 @@ const InternalReferralScreen: React.FC<InternalReferralScreenProps> = () => {
               >
                 <View style={styles.formContainer}>
                   {/* Copy must match the backend rule in referralRewardService.js:
-                      5% of the referred user's daily mined BTC, credited every day
-                      for as long as they keep mining. There is no fixed bounty and
-                      no qualifying period -- the previous "$50 after 5 days" wording
-                      described a scheme that was never implemented. */}
+                      each day a referred user mines, the referrer gets bonus mining
+                      power worth 5% of that day's mining, for 24 hours. Rewards are
+                      mining power, not BTC (App Store 3.1.5(v), since 30 Oct 2026). */}
                   <Text style={styles.earnText}>
-                    Earn <Text style={styles.earnHighlight}>5% of everything your friends mine</Text> — paid
-                    into your BTC balance every day, for as long as they keep mining.
+                    Get <Text style={styles.earnHighlight}>bonus mining power equal to 5% of your friends' mining</Text> — for
+                    24 hours after each day they mine, for as long as they keep mining.
                   </Text>
 
                   {/* Fixed Invite Button */}

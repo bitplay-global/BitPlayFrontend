@@ -176,7 +176,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = () => {
                     resizeMode="contain"
                   />
                 </View>
-                <Text style={styles.logoTagline}>Cloud Mining Made Simple</Text>
+                <Text style={styles.logoTagline}>Bitcoin Rewards Made Simple</Text>
               </View>
 
               {/* Form Box */}

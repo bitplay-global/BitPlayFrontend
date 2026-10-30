@@ -19,7 +19,10 @@ interface InviteFriendsModalProps {
   visible: boolean;
   onClose: () => void;
   referralCode: string;
+  /** BTC paid for referrals before 30 Oct 2026, when rewards were BTC. */
   invitationRewards: number | string;
+  /** Bonus GH/s from referrals active right now (backend activeRewardGh). */
+  referralBonusGh?: number;
   referralCount?: number;
 }
 
@@ -33,6 +36,7 @@ const InviteFriendsModal: React.FC<InviteFriendsModalProps> = ({
   onClose,
   referralCode,
   invitationRewards,
+  referralBonusGh = 0,
   referralCount = 0,
 }) => {
   // Auto-open share when modal becomes visible
@@ -46,7 +50,7 @@ const InviteFriendsModal: React.FC<InviteFriendsModalProps> = ({
             default: 'https://bitplaypro.com/download',
           });
           await Share.share({
-            message: `Join me on BitPlay Pro, the cloud mining app. Use my invitation code: ${referralCode}\n\nDownload the app: ${downloadUrl}`,
+            message: `Join me on BitPlay Pro, the Bitcoin rewards app. Use my invitation code: ${referralCode}\n\nDownload the app: ${downloadUrl}`,
             title: 'Join BitPlay Pro',
           });
         } catch (error) {
@@ -122,33 +126,32 @@ const InviteFriendsModal: React.FC<InviteFriendsModalProps> = ({
 
             {/* Earnings Display */}
             <View style={styles.earningsContainer}>
-              <Text style={styles.earningsLabel}>Total Earnings</Text>
+              {/* Referral rewards are bonus mining power (backend
+                  referralRewardService.js, since 30 Oct 2026): App Store 3.1.5(v)
+                  bars paying crypto for invites. BTC paid before then is still
+                  shown, smaller, below. */}
+              <Text style={styles.earningsLabel}>Referral Bonus Today</Text>
               <View style={styles.earningsAmountBox}>
-                <Text style={styles.earningsNumber}>
-                  {(() => {
-                    if (typeof invitationRewards === 'string') {
-                      // If it's already a formatted string with 16 decimals, use it as-is
-                      // Otherwise parse and format to 16 decimals
-                      const parsed = parseFloat(invitationRewards);
-                      return isNaN(parsed) ? '0.0000000000000000' : parsed.toFixed(16);
-                    }
-                    // Always show 16 decimal places
-                    return invitationRewards.toFixed(16);
-                  })()}
-                </Text>
-                <Text style={styles.earningsCurrency}>BTC</Text>
+                <Text style={styles.earningsNumber}>{Number(referralBonusGh || 0).toFixed(2)}</Text>
+                <Text style={styles.earningsCurrency}>GH/s</Text>
               </View>
+              {(() => {
+                const earlier = typeof invitationRewards === 'string' ? parseFloat(invitationRewards) : invitationRewards;
+                return earlier > 0 ? (
+                  <Text style={styles.referralCountText}>Earned before 30 Oct: {earlier.toFixed(8)} BTC</Text>
+                ) : null;
+              })()}
               {referralCount !== undefined && referralCount > 0 && (
                 <Text style={styles.referralCountText}>
                   {referralCount} {referralCount === 1 ? 'referral' : 'referrals'}
                 </Text>
               )}
-              {/* States the actual backend rule (referralRewardService.js): 5% of the
-                  referred user's daily mined BTC, credited daily for as long as they
-                  mine. This modal is the only referral surface users can actually
-                  reach, so the rule has to be stated here. */}
+              {/* States the backend rule (referralRewardService.js): each day a
+                  friend mines, you get bonus mining power worth 5% of their mining
+                  for the next 24 hours. This modal is the only referral surface
+                  users can actually reach, so the rule has to be stated here. */}
               <Text style={styles.earnRuleText}>
-                You earn 5% of everything your friends mine — every day
+                Each day a friend mines, you get bonus mining power equal to 5% of their mining for 24 hours
               </Text>
             </View>
 

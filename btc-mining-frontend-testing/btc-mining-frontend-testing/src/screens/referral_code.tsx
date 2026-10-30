@@ -160,7 +160,7 @@ const ReferralScreen: React.FC<ReferralScreenProps> = () => {
         default: 'https://bitplaypro.com/download',
       });
       const result = await Share.share({
-        message: `Join me on BitPlay Pro, the cloud mining app. Use my invitation code: ${userReferralCode}\n\nDownload the app: ${downloadUrl}`,
+        message: `Join me on BitPlay Pro, the Bitcoin rewards app. Use my invitation code: ${userReferralCode}\n\nDownload the app: ${downloadUrl}`,
         title: 'Join BitPlay Pro',
       });
 

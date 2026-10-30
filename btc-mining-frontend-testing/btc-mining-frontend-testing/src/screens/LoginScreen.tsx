@@ -212,7 +212,7 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
                   resizeMode="contain"
                 />
               </View>
-              <Text style={styles.logoTagline}>Cloud Mining Made Simple</Text>
+              <Text style={styles.logoTagline}>Bitcoin Rewards Made Simple</Text>
             </View>
 
             <View style={styles.screenContainer}>
