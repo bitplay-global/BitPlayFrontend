@@ -59,6 +59,8 @@ import {
   MAX_FREE_USER_TOTAL_HASHPOWER_GH,
 } from '../utils/miningPowerCap';
 import OdometerCounter from '../components/OdometerCounter';
+import WithdrawProgress from '../components/WithdrawProgress';
+import { formatBtc, formatSats } from '../utils/sats';
 import { useAdConfig } from '../providers/AdConfigProvider';
 import {
   trackMiningStarted,
@@ -1770,6 +1772,9 @@ const Page: React.FC = () => {
                     <Text style={styles.balanceAmount}>—</Text>
                   ) : (
                     <>
+                      <Text style={styles.balanceSats} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                        {formatSats(totalBtc)}
+                      </Text>
                       <OdometerCounter value={totalBtc} />
                     </>
                   )}
@@ -1779,6 +1784,12 @@ const Page: React.FC = () => {
           </View>
         </View>
 
+        {/* Progress toward the withdrawal minimum, on the same BTC + BTC_DEPOSIT total shown above. */}
+        <WithdrawProgress
+          balanceBtc={!hasCache && isLoading ? null : totalBtc}
+          style={styles.withdrawProgress}
+        />
+
         <View style={styles.detailsRow}>
           {/* Box 1 - Earning Details */}
           <TouchableOpacity
@@ -1786,33 +1797,22 @@ const Page: React.FC = () => {
             onPress={() => navigation.navigate('BalanceHistoryScreen')}
           >
             <View style={styles.detailLeft}>
-              {Platform.OS === 'ios' ? (
-                <Text
-                  style={styles.detailBTCValue}
-                  numberOfLines={2}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.6}
-                >
-                  <Text style={styles.detailBTCNumber}>
-                    {previousDayEarnings > 0
-                      ? previousDayEarnings.toFixed(16)
-                      : userBalanceBTC?.toFixed(16)}
-                  </Text>
-
-                  <Text style={styles.detailBTCUnit}> BTC</Text>
-                </Text>
-              ) : (
-                <Text
-                  style={styles.detailBTCNumber}
-                  numberOfLines={2}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.6}
-                >
-                  {previousDayEarnings > 0
-                    ? `${previousDayEarnings.toFixed(16)} BTC`
-                    : `${userBalanceBTC?.toFixed(16)} BTC`}
-                </Text>
-              )}
+              <Text
+                style={styles.detailBTCNumber}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+              >
+                {formatSats(previousDayEarnings > 0 ? previousDayEarnings : userBalanceBTC)}
+              </Text>
+              <Text
+                style={styles.detailBTCSecondary}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {formatBtc(previousDayEarnings > 0 ? previousDayEarnings : userBalanceBTC)} BTC
+              </Text>
 
               <Text style={styles.detailSubtitle}>
                 {previousDayEarnings > 0
@@ -3032,6 +3032,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
+  balanceSats: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#FBBF24',
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+
+  withdrawProgress: {
+    marginBottom: 12,
+  },
+
   balanceAmount: {
     fontSize: 20,
     fontWeight: 500,
@@ -3449,6 +3461,13 @@ const styles = StyleSheet.create({
     color: '#F5F7FA',
     fontWeight: 'bold',
     fontSize: 16.5,
+  },
+
+  detailBTCSecondary: {
+    color: '#7E8CA3',
+    fontSize: 11,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
 
   detailBTCUnit: {
