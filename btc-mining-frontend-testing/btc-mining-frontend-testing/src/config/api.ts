@@ -63,6 +63,9 @@ const MOBILE_SECURITY_HEADERS: Record<string, string> = {
   'x-app-id': MOBILE_APP_ID,
   'x-app-platform': Platform.OS,
   'x-app-version': DeviceInfo.getVersion(),
+  // Build number tells builds of the same version apart (backend
+  // middleware/appVersionTracker.js records it per user).
+  'x-app-build': DeviceInfo.getBuildNumber(),
   'x-device-id': DeviceInfo.getUniqueIdSync(),
   'x-mobile-client': 'true',
 };

@@ -167,23 +167,11 @@ const MyMiner = () => {
         setServerTimeRemaining(secondsUntilLocalMidnight(new Date()));
         setDailyRewardClaimed(userData?.daily_reward_claimed ?? false);
 
-        // Fetch user's hashpower from purchased subscriptions for premium tab
-        let nextSubscriptions = userSubscriptions;
-        try {
-          const hashpowerUrl = `${get_data_uri('GET_USER_HASHPOWER')}?userId=${user.id}`;
-
-          const response = await axios.get(hashpowerUrl);
-
-          if (response.data.success) {
-            // Set user subscriptions for premium tab
-            if (response.data.subscriptions && Array.isArray(response.data.subscriptions)) {
-              setUserSubscriptions(response.data.subscriptions);
-              nextSubscriptions = response.data.subscriptions;
-            }
-          }
-        } catch (subscriptionErr) {
-          // Don't set error for premium tab API, only log it
-        }
+        // Subscriptions for the premium tab used to come from
+        // GET /api/subscriptionplans/hashpower?userId=, a route the backend
+        // never had (only /hashpower/:userId, which returns no list), so every
+        // load was a 404. Purchases below are the real source.
+        const nextSubscriptions = userSubscriptions;
 
         // Fetch user's purchase history
         let nextPurchases = userPurchases;

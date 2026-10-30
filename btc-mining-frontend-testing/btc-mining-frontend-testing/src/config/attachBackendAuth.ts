@@ -1,5 +1,9 @@
 /**
- * Sends the signed-in user's token with every backend API call.
+ * Sends the signed-in user's token -- and the app's identity headers
+ * (getMobileSecurityHeaders: app id, platform, version, build, device id) --
+ * with every backend API call. The headers used to be attached by hand to ~13
+ * of ~100 calls, so most requests could not be told apart from a script
+ * posing as the app, and the backend could not see which build a user runs.
  *
  * The backend (dashboard.bitplaypro.com/api) used to take the acting user from
  * `userId` in the URL or body, so any caller could act as any user. It now
@@ -18,7 +22,7 @@
  */
 import axios from 'axios';
 import { getSession } from '../auth/auth';
-import { SERVER_BASE_URL, notifyAuthExpired } from './api';
+import { SERVER_BASE_URL, notifyAuthExpired, getMobileSecurityHeaders } from './api';
 
 const BACKEND_API_PREFIX = `${SERVER_BASE_URL}/api/`;
 const SESSION_CODES = new Set(['INVALID_TOKEN', 'AUTH_REQUIRED', 'MFA_REQUIRED']);
@@ -36,10 +40,24 @@ function currentToken(): string | null {
   }
 }
 
-function hasAuthorization(headers: any): boolean {
+function hasHeader(headers: any, name: string): boolean {
   if (!headers) return false;
-  if (typeof headers.has === 'function') return headers.has('Authorization');
-  return Object.keys(headers).some(k => k.toLowerCase() === 'authorization');
+  if (typeof headers.has === 'function') return headers.has(name);
+  const lower = name.toLowerCase();
+  return Object.keys(headers).some(k => k.toLowerCase() === lower);
+}
+
+function hasAuthorization(headers: any): boolean {
+  return hasHeader(headers, 'Authorization');
+}
+
+/** The app's identity headers the caller has not already set itself. */
+function missingAppHeaders(headers: any): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(getMobileSecurityHeaders())) {
+    if (!hasHeader(headers, k)) out[k] = v;
+  }
+  return out;
 }
 
 let installed = false;
@@ -58,13 +76,12 @@ export function installBackendAuth() {
     if (!isBackendApi(url)) return originalFetch(input, init);
 
     const token = currentToken();
-    let nextInit = init;
-    if (token && !hasAuthorization(init?.headers)) {
-      const base = init?.headers && typeof init.headers.forEach === 'function'
-        ? Object.fromEntries((init.headers as any).entries?.() ?? [])
-        : { ...(init?.headers || {}) };
-      nextInit = { ...init, headers: { ...base, Authorization: `Bearer ${token}` } };
-    }
+    const base = init?.headers && typeof init.headers.forEach === 'function'
+      ? Object.fromEntries((init.headers as any).entries?.() ?? [])
+      : { ...(init?.headers || {}) };
+    const extra: Record<string, string> = missingAppHeaders(base);
+    if (token && !hasAuthorization(base)) extra.Authorization = `Bearer ${token}`;
+    const nextInit = { ...init, headers: { ...base, ...extra } };
 
     const res = await originalFetch(input, nextInit);
     if (res.status === 401 && token) {
@@ -82,8 +99,11 @@ export function installBackendAuth() {
     const url = config.url?.startsWith('http') ? config.url : `${config.baseURL ?? ''}${config.url ?? ''}`;
     if (isBackendApi(url)) {
       const token = currentToken();
-      if (token && !hasAuthorization(config.headers)) {
-        (config.headers as any) = { ...(config.headers as any), Authorization: `Bearer ${token}` };
+      const extra: Record<string, string> = missingAppHeaders(config.headers);
+      if (token && !hasAuthorization(config.headers)) extra.Authorization = `Bearer ${token}`;
+      for (const [k, v] of Object.entries(extra)) {
+        if (typeof (config.headers as any)?.set === 'function') (config.headers as any).set(k, v);
+        else (config.headers as any) = { ...(config.headers as any), [k]: v };
       }
     }
     return config;

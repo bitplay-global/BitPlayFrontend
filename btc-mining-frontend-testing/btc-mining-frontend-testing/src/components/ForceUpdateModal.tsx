@@ -15,6 +15,11 @@ type ForceUpdateModalProps = {
   currentVersion: string;
   latestVersion: string | null;
   onDismiss: () => void;
+  /** False for a forced update: no "Later" and no tap-outside close. */
+  dismissible?: boolean;
+  title?: string;
+  message?: string;
+  buttonText?: string;
 };
 
 export default function ForceUpdateModal({
@@ -23,7 +28,12 @@ export default function ForceUpdateModal({
   currentVersion,
   latestVersion,
   onDismiss,
+  dismissible = true,
+  title,
+  message,
+  buttonText,
 }: ForceUpdateModalProps) {
+  const close = dismissible ? onDismiss : () => {};
   const openStore = () => {
     Linking.openURL(storeUrl).catch(() => {});
   };
@@ -35,21 +45,21 @@ export default function ForceUpdateModal({
       transparent
       animationType="fade"
       statusBarTranslucent
+      onRequestClose={close}
     >
       <TouchableOpacity
         style={styles.overlay}
         activeOpacity={1}
-        onPress={onDismiss}
+        onPress={close}
       >
         <TouchableOpacity
           style={styles.card}
           activeOpacity={1}
           onPress={(e) => e.stopPropagation()}
         >
-          <Text style={styles.title}>Update required</Text>
+          <Text style={styles.title}>{title || (dismissible ? 'Update available' : 'Update required')}</Text>
           <Text style={styles.message}>
-            A new version of BitPlayPro is available. Please update to continue
-            using the app.
+            {message || 'A new version of BitPlayPro is available. Please update to continue using the app.'}
           </Text>
           <View style={styles.versionRow}>
             <Text style={styles.versionLabel}>Current: </Text>
@@ -67,16 +77,18 @@ export default function ForceUpdateModal({
             activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>
-              Update from {Platform.OS === 'ios' ? 'App Store' : 'Play Store'}
+              {buttonText || `Update from ${Platform.OS === 'ios' ? 'App Store' : 'Play Store'}`}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={onDismiss}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.cancelButtonText}>Later</Text>
-          </TouchableOpacity>
+          {dismissible && (
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={onDismiss}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.cancelButtonText}>Later</Text>
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>

@@ -1,12 +1,16 @@
 /**
- * Force Update: Check app version against Play Store / App Store without external services.
- * - Gets current version from device (react-native-device-info).
- * - Fetches latest version from iTunes Lookup (iOS) or Play Store page (Android).
- * - Compares versions and returns whether a force update is required + store URL.
+ * Update prompt.
+ * - First choice: the policy set in the admin dashboard (Settings -> app version
+ *   policy; backend GET /api/app-version-policy, helpers/versionPolicy.js):
+ *   latest / force-below versions per platform, optional or forced, its own
+ *   title, message and button.
+ * - When that policy is off or unreachable: the store's latest version, from
+ *   iTunes Lookup (iOS) or the Play Store page (Android), as before.
  */
 
 import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
+import { SERVER_BASE_URL } from '../config/api';
 
 // App store identifiers (match android/app/build.gradle and ios project)
 const ANDROID_PACKAGE_ID = 'com.bitplay.app';
@@ -107,11 +111,85 @@ async function getIosStoreUrl(): Promise<string> {
 }
 
 export type ForceUpdateResult = {
+  /** True when a prompt should be shown (optional or forced). */
   forceUpdate: boolean;
   currentVersion: string;
   latestVersion: string | null;
   storeUrl: string;
+  /** False when the user must update: no "Later", no tap-outside to close. */
+  dismissible?: boolean;
+  title?: string;
+  message?: string;
+  buttonText?: string;
 };
+
+type PlatformPolicy = {
+  mode?: string;
+  latestVersion?: string;
+  minSupportedVersion?: string;
+  forceUpdateBelowVersion?: string;
+  storeUrl?: string;
+  dismissible?: boolean;
+};
+type VersionPolicy = PlatformPolicy & {
+  enabled?: boolean;
+  title?: string;
+  message?: string;
+  buttonText?: string;
+  android?: PlatformPolicy;
+  ios?: PlatformPolicy;
+};
+
+async function fetchVersionPolicy(): Promise<VersionPolicy | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(`${SERVER_BASE_URL}/api/app-version-policy`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return (await res.json()) as VersionPolicy;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * What the dashboard policy says for this install, or null to fall back to
+ * the store check. Platform settings win over the general ones.
+ */
+export function evaluatePolicy(
+  policy: VersionPolicy | null,
+  current: string,
+  platform: 'ios' | 'android',
+  fallbackStoreUrl: string,
+): ForceUpdateResult | null {
+  if (!policy?.enabled) return null;
+  const p: PlatformPolicy = policy[platform] || {};
+  const pick = (k: keyof PlatformPolicy): string => {
+    const own = p[k];
+    if (typeof own === 'string' && own.trim()) return own.trim();
+    const general = policy[k];
+    return typeof general === 'string' ? general.trim() : '';
+  };
+  const mode = pick('mode') || 'optional';
+  const latest = pick('latestVersion');
+  const forceBelow = pick('forceUpdateBelowVersion') || pick('minSupportedVersion');
+  const below = (v: string) => !!v && compareVersions(current, v) < 0;
+
+  const forced = below(forceBelow) || (mode === 'force' && below(latest));
+  const prompt = mode !== 'none' && (forced || below(latest));
+  const dismissible = !forced && (typeof p.dismissible === 'boolean' ? p.dismissible : policy.dismissible !== false);
+  return {
+    forceUpdate: prompt,
+    currentVersion: current,
+    latestVersion: latest || null,
+    storeUrl: pick('storeUrl') || fallbackStoreUrl,
+    dismissible,
+    title: policy.title || undefined,
+    message: policy.message || undefined,
+    buttonText: policy.buttonText || undefined,
+  };
+}
 
 /**
  * Check if the user needs to force update.
@@ -119,29 +197,21 @@ export type ForceUpdateResult = {
  */
 export async function checkForceUpdate(): Promise<ForceUpdateResult> {
   const current = await getCurrentVersion();
-  let latest: string | null = null;
-  let storeUrl: string;
+  const platform = Platform.OS === 'ios' ? 'ios' : 'android';
+  const fallbackStoreUrl = platform === 'ios' ? await getIosStoreUrl() : getStoreUrl();
 
-  if (Platform.OS === 'ios') {
-    latest = await getLatestVersionIOS();
-    storeUrl = await getIosStoreUrl();
+  const fromPolicy = evaluatePolicy(await fetchVersionPolicy(), current, platform, fallbackStoreUrl);
+  if (fromPolicy) return fromPolicy;
 
-
-  console.log("hello", latest, storeUrl)
-
-  } else {
-    latest = await getLatestVersionAndroid();
-    storeUrl = getStoreUrl();
-  }
-
+  const latest = platform === 'ios' ? await getLatestVersionIOS() : await getLatestVersionAndroid();
   const forceUpdate =
     latest != null && latest !== '' && compareVersions(latest, current) > 0;
-
 
   return {
     forceUpdate,
     currentVersion: current,
     latestVersion: latest,
-    storeUrl,
+    storeUrl: fallbackStoreUrl,
+    dismissible: true,
   };
 }

@@ -470,6 +470,10 @@ const App = () => {
         currentVersion={forceUpdate.currentVersion}
         latestVersion={forceUpdate.latestVersion}
         onDismiss={() => setForceUpdate(null)}
+        dismissible={forceUpdate.dismissible !== false}
+        title={forceUpdate.title}
+        message={forceUpdate.message}
+        buttonText={forceUpdate.buttonText}
       />
     )} 
     <AuthProvider>
