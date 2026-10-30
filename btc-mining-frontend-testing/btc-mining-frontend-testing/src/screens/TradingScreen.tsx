@@ -23,6 +23,7 @@ import {
   ActivityIndicator,
   Pressable,
 } from 'react-native';
+import { useFreeRetries } from '../hooks/useFreeRetries';
 import { useAuth } from '../auth/AuthProvider';
 import { useHashPower } from '../stores/HashPowerStore';
 import { get_data_uri } from '../config/api';
@@ -614,9 +615,14 @@ export default function TradingScreen() {
     [user?.id]
   );
 
+  // A lost trade retries for free a few times before one needs a video
+  // (services/gameRetryCredits.ts). Any fully watched video starts it again.
+  const freeRetry = useFreeRetries('BTC Trading');
+
   const onRewardEarned = useCallback((_amount: number, _type: string) => {
     pendingRewardAdShowRef.current = false;
-    
+    freeRetry.reset();
+
     if (pendingLoseAdWatchRef.current) {
       loseAdCompletedRef.current = true;
       return;
@@ -627,7 +633,7 @@ export default function TradingScreen() {
       claimTradeReward(claimId);
       pendingClaimIdRef.current = null;
     }
-  }, [claimTradeReward]);
+  }, [claimTradeReward, freeRetry]);
 
   const onAdClosed = useCallback(() => {
     setWinModal(null);
@@ -679,7 +685,7 @@ export default function TradingScreen() {
     if (!rewardLoaded || !pendingRewardAdShowRef.current) return;
     pendingRewardAdShowRef.current = false;
     showRewardAd();
-  }, [rewardLoaded, showRewardAd]);
+  }, [rewardLoaded, showRewardAd, freeRetry]);
 
   const startTrade = useCallback(
     (direction: Direction) => {
@@ -786,6 +792,10 @@ export default function TradingScreen() {
   }, []);
 
   const closeLoseModal = useCallback(() => {
+    if (freeRetry.tryFree()) {
+      setLoseModal(null);
+      return;
+    }
     if (rewardLoaded) {
       pendingLoseAdWatchRef.current = true;
       showRewardAd();
@@ -1232,15 +1242,17 @@ export default function TradingScreen() {
                 style={({ pressed }) => [
                   styles.tryAgainBtn,
                   pressed && { opacity: 0.85 },
-                  (rewardAdLoading && !rewardLoaded) && { opacity: 0.6 }
+                  (freeRetry.left === 0 && rewardAdLoading && !rewardLoaded) && { opacity: 0.6 }
                 ]}
                 onPress={closeLoseModal}
-                disabled={rewardAdLoading && !rewardLoaded}
+                disabled={freeRetry.left === 0 && rewardAdLoading && !rewardLoaded}
               >
-                {rewardAdLoading && !rewardLoaded ? (
+                {freeRetry.left === 0 && rewardAdLoading && !rewardLoaded ? (
                   <ActivityIndicator color="#FFF" size="small" />
                 ) : (
-                  <Text style={styles.tryAgainBtnTxt}>WATCH AD TO TRY AGAIN</Text>
+                  <Text style={styles.tryAgainBtnTxt}>
+                    {freeRetry.left > 0 ? `TRY AGAIN (${freeRetry.left} FREE)` : 'WATCH AD TO TRY AGAIN'}
+                  </Text>
                 )}
               </Pressable>
             </LinearGradient>

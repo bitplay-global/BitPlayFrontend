@@ -9,6 +9,8 @@ type AdConfig = {
   homeBannerId: string | null;
   gamRewardedVideoId: string | null;
   gamHomeBannerId: string | null;
+  /** Free retries after a lost game round before a video (services/gameRetryCredits.ts). Null = app default. */
+  gameFreeRetries?: number | null;
 };
 
 type AdConfigContextType = {
@@ -75,6 +77,7 @@ export const AdConfigProvider = ({ children }: { children: React.ReactNode }) =>
           homeBannerId,
           gamRewardedVideoId,
           gamHomeBannerId,
+          gameFreeRetries: typeof data?.gameFreeRetries === 'number' ? data.gameFreeRetries : null,
         };
         setAds(nextAds);
         saveObjectToStorage(AD_CONFIG_CACHE_KEY, nextAds);

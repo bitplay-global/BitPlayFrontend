@@ -136,6 +136,7 @@ export default function RockPaperScissorsScreen() {
               adLoading={reward.retryAdLoading}
               adLoaded={reward.retryAdLoaded}
               onRetry={reward.openRetryAd}
+              freeRetriesLeft={reward.freeRetriesLeft}
             />
           )}
 
@@ -146,6 +147,7 @@ export default function RockPaperScissorsScreen() {
               adLoading={reward.retryAdLoading}
               adLoaded={reward.retryAdLoaded}
               onRetry={reward.openRetryAd}
+              freeRetriesLeft={reward.freeRetriesLeft}
             />
           )}
 

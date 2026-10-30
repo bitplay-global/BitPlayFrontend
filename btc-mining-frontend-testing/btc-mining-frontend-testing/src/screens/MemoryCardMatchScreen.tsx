@@ -11,6 +11,7 @@ import { useHashPower } from '../stores/HashPowerStore';
 import { useAuth } from '../auth/AuthProvider';
 import { get_data_uri } from '../config/api';
 import { useRewardedVideoAd } from '../services/googleAds';
+import { useFreeRetries } from '../hooks/useFreeRetries';
 import { useAdConfig } from '../providers/AdConfigProvider';
 import { BannerAdWithGamFallback } from '../components/ads/BannerAdWithGamFallback';
 import { BannerAdSize } from 'react-native-google-mobile-ads';
@@ -220,10 +221,14 @@ export default function MemoryCardMatchScreen() {
     setClaimed(true); setClaiming(false);
   };
 
-  const onRewardEarned = useCallback(() => { void claimReward(); }, [won, claimed]);
+  // A lost round (time up) replays for free a few times before one needs a
+  // video (services/gameRetryCredits.ts); replaying after a win still costs one.
+  const freeRetry = useFreeRetries('Memory Match');
+
+  const onRewardEarned = useCallback(() => { freeRetry.reset(); void claimReward(); }, [won, claimed, freeRetry]);
   const { show: showClaim, loaded: claimLoaded } = useRewardedVideoAd(onRewardEarned, { primaryUnitId: ads.rewardedVideoId });
 
-  const onPlayAgainEarned = useCallback(() => { playAgainEarned.current = true; }, []);
+  const onPlayAgainEarned = useCallback(() => { playAgainEarned.current = true; freeRetry.reset(); }, [freeRetry]);
   const onPlayAgainClosed = useCallback(() => {
     if (playAgainEarned.current) { playAgainEarned.current = false; setRound(r => r + 1); startRound(); }
     else Alert.alert('Ad Incomplete', 'Watch the full ad to play again.');
@@ -294,6 +299,7 @@ export default function MemoryCardMatchScreen() {
             <TouchableOpacity
               style={s.retryBtn}
               onPress={() => {
+                if (!won && freeRetry.tryFree()) { setRound(r => r + 1); startRound(); return; }
                 // showPlayAgain() either shows the ad or, when it is not ready,
                 // starts a fresh request -- so this never becomes a dead button.
                 showPlayAgain();
@@ -302,7 +308,7 @@ export default function MemoryCardMatchScreen() {
                 }
               }}
             >
-              <Text style={s.retryTxt} numberOfLines={1}>▶ Watch Ad → Play Again</Text>
+              <Text style={s.retryTxt} numberOfLines={1}>{!won && freeRetry.left > 0 ? `↻ Play Again (${freeRetry.left} free)` : '▶ Watch Ad → Play Again'}</Text>
             </TouchableOpacity>
           </View>
         </LinearGradient>

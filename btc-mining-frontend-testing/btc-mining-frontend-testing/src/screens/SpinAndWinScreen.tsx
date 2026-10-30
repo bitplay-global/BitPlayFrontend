@@ -16,6 +16,7 @@ import {
   Image,
   Linking,
 } from 'react-native';
+import { useFreeRetries } from '../hooks/useFreeRetries';
 import GameRulesNote from '../components/GameRulesNote';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -326,8 +327,12 @@ const SpinAndWinScreen: React.FC = () => {
     [user?.id, addHashPower, setHashPower, setPurchasedHashpowerGh],
   );
 
+  // Losses retry for free a few times before one needs a video (services/gameRetryCredits.ts).
+  const freeRetry = useFreeRetries('Spin & Win');
+
   const onClaimAdClosed = useCallback(() => {
     const g = lastGrantedGh.current;
+    if (g >= 0) freeRetry.reset();
     setPhase('idle');
     setWonGh(null);
     setWinnerIndex(null);
@@ -336,7 +341,7 @@ const SpinAndWinScreen: React.FC = () => {
     setBanner(g >= 0 ? `+${g} Gh/s is now in your mining power.` : null);
     pendingHistoryId.current = null;
     lastGrantedGh.current = -1;
-  }, []);
+  }, [freeRetry]);
 
   const {
     show: showClaimAd,
@@ -346,7 +351,8 @@ const SpinAndWinScreen: React.FC = () => {
 
   const onRetryAdReward = useCallback(() => {
     retryEarnedRef.current = true;
-  }, []);
+    freeRetry.reset();
+  }, [freeRetry]);
 
   const onRetryAdClosed = useCallback(() => {
     if (retryEarnedRef.current) {
@@ -521,6 +527,14 @@ const SpinAndWinScreen: React.FC = () => {
   };
 
   const openRetryAd = () => {
+    if (freeRetry.tryFree()) {
+      setPhase('idle');
+      setWinnerIndex(null);
+      setRewardPill('Spin to win');
+      setRewardAmountLine('—');
+      setBanner(null);
+      return;
+    }
     if (!retryAdLoaded) {
       // Kick a fresh request instead of only apologising -- a failed load
       // otherwise leaves this button permanently useless.
@@ -742,16 +756,16 @@ const SpinAndWinScreen: React.FC = () => {
                   <View style={styles.outcomeInner}>
                     <Icon name="refresh-circle" size={36} color="#F87171" style={{ marginBottom: 6 }} />
                     <Text style={styles.outcomeTitle}>Try Again!</Text>
-                    <Text style={styles.outcomeBody}>Watch a short video to spin again.</Text>
-                    <TouchableOpacity style={styles.adBtn} onPress={openRetryAd} disabled={retryAdLoading && !retryAdLoaded}>
+                    <Text style={styles.outcomeBody}>{freeRetry.left > 0 ? `Try again for free — ${freeRetry.left} free ${freeRetry.left === 1 ? 'retry' : 'retries'} left before a short video.` : 'Watch a short video to spin again.'}</Text>
+                    <TouchableOpacity style={styles.adBtn} onPress={openRetryAd} disabled={freeRetry.left === 0 && retryAdLoading && !retryAdLoaded}>
                       <LinearGradient colors={['#EF4444', '#B91C1C']} style={styles.adBtnGrad}>
                         <View style={styles.adBtnInner}>
-                          {retryAdLoading && !retryAdLoaded ? (
+                          {freeRetry.left === 0 && retryAdLoading && !retryAdLoaded ? (
                             <ActivityIndicator color="#FFF" />
                           ) : (
                             <>
-                              <Icon name="play-circle" size={22} color="#FFF" />
-                              <Text style={styles.adBtnTextLight}>Watch & Spin Again</Text>
+                              <Icon name={freeRetry.left > 0 ? 'refresh' : 'play-circle'} size={22} color="#FFF" />
+                              <Text style={styles.adBtnTextLight}>{freeRetry.left > 0 ? 'Spin Again' : 'Watch & Spin Again'}</Text>
                             </>
                           )}
                         </View>

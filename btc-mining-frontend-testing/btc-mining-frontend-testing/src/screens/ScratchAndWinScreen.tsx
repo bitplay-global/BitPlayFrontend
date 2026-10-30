@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Alert, ActivityIndicator,
   PanResponder, Dimensions, GestureResponderEvent,
 } from 'react-native';
+import { useFreeRetries } from '../hooks/useFreeRetries';
 import GameRulesNote from '../components/GameRulesNote';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -206,21 +207,25 @@ export default function ScratchAndWinScreen() {
     setClaimedBanner(`+${gh} GH/s is now in your mining power.`);
   }, [user?.id, addHashPower]);
 
+  // Losses retry for free a few times before one needs a video (services/gameRetryCredits.ts).
+  const freeRetry = useFreeRetries('Scratch & Win');
+
   const onClaimAdClosed = useCallback(() => {
     if (claimEarnedRef.current) {
       claimEarnedRef.current = false;
+      freeRetry.reset();
       dealNewCard();
     } else {
       Alert.alert('Ad not completed', 'Please watch the full video to redeem your reward.');
     }
-  }, [dealNewCard]);
+  }, [dealNewCard, freeRetry]);
 
   const {
     show: showClaimAd, loading: claimAdLoading, loaded: claimAdLoaded,
   } = useRewardedVideoAd(onClaimAdReward, { primaryUnitId: ads.rewardedVideoId }, onClaimAdClosed);
 
   // --- Loss retry: watch ad -> unlock a new scratch attempt (no free retry) ---
-  const onRetryAdReward = useCallback(() => { retryEarnedRef.current = true; }, []);
+  const onRetryAdReward = useCallback(() => { retryEarnedRef.current = true; freeRetry.reset(); }, [freeRetry]);
   const onRetryAdClosed = useCallback(() => {
     if (retryEarnedRef.current) {
       retryEarnedRef.current = false;
@@ -247,6 +252,10 @@ export default function ScratchAndWinScreen() {
   };
 
   const openRetryAd = () => {
+    if (freeRetry.tryFree()) {
+      dealNewCard();
+      return;
+    }
     if (!retryAdLoaded) {
       // Kick a fresh request instead of only apologising -- a failed load
       // otherwise leaves this button permanently useless.
@@ -362,16 +371,16 @@ export default function ScratchAndWinScreen() {
                 <View style={s.outcomeInner}>
                   <Icon name="refresh-circle" size={32} color="#F87171" style={{ marginBottom: 6 }} />
                   <Text style={s.outcomeTitle}>Better Luck Next Time!</Text>
-                  <Text style={s.outcomeBody}>Watch a short video to try again.</Text>
-                  <TouchableOpacity style={s.adBtn} onPress={openRetryAd} disabled={retryAdLoading && !retryAdLoaded}>
+                  <Text style={s.outcomeBody}>{freeRetry.left > 0 ? `Try again for free — ${freeRetry.left} free ${freeRetry.left === 1 ? 'retry' : 'retries'} left before a short video.` : 'Watch a short video to try again.'}</Text>
+                  <TouchableOpacity style={s.adBtn} onPress={openRetryAd} disabled={freeRetry.left === 0 && retryAdLoading && !retryAdLoaded}>
                     <LinearGradient colors={['#EF4444', '#B91C1C']} style={s.adBtnGrad}>
                       <View style={s.adBtnInner}>
-                        {retryAdLoading && !retryAdLoaded ? (
+                        {freeRetry.left === 0 && retryAdLoading && !retryAdLoaded ? (
                           <ActivityIndicator color="#FFF" />
                         ) : (
                           <>
-                            <Icon name="play-circle" size={22} color="#FFF" />
-                            <Text style={s.adBtnTextLight}>Watch Ad & Try Again</Text>
+                            <Icon name={freeRetry.left > 0 ? 'refresh' : 'play-circle'} size={22} color="#FFF" />
+                            <Text style={s.adBtnTextLight}>{freeRetry.left > 0 ? 'Try Again' : 'Watch Ad & Try Again'}</Text>
                           </>
                         )}
                       </View>
