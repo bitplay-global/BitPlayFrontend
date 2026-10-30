@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Alert, ActivityIndicator,
   PanResponder, Dimensions, GestureResponderEvent,
 } from 'react-native';
+import GameRulesNote from '../components/GameRulesNote';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import LinearGradient from 'react-native-linear-gradient';
@@ -382,6 +383,7 @@ export default function ScratchAndWinScreen() {
           )}
 
           <Text style={s.footerHint}>1-5 GH/s per win · watch a video to redeem or try again</Text>
+          <GameRulesNote game="Scratch & Win" prizes="1, 2, 3, 4 or 5 GH/s, or no prize" />
         </>
       )}
     </GameScreenWrapper>

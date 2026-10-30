@@ -46,7 +46,7 @@ const InviteFriendsModal: React.FC<InviteFriendsModalProps> = ({
             default: 'https://bitplaypro.com/download',
           });
           await Share.share({
-            message: `Join me on BitPlay Pro, the cloud mining app. Use my invitation code: ${referralCode}\n\nDownload the app: ${downloadUrl}`,
+            message: `Join me on BitPlay Pro, the Bitcoin rewards app. Use my invitation code: ${referralCode}\n\nDownload the app: ${downloadUrl}`,
             title: 'Join BitPlay Pro',
           });
         } catch (error) {

@@ -62,7 +62,7 @@ const AboutUsScreen = () => {
             <Text style={styles.sectionTitle}>What is BitPlayPro?</Text>
           </View>
           <Text style={styles.contentText}>
-          BitPlayPro is a cloud mining app that makes Bitcoin mining easy to explore. Whether you're new to crypto or just curious, BitPlayPro offers a simple, gamified way to take part. Build mining power, complete daily challenges and play games – all from your smartphone.
+          BitPlayPro is a Bitcoin rewards app that makes crypto easy to explore. Mining power in BitPlayPro is a reward simulation: it sets how many Bitcoin rewards you collect, and BitPlayPro does not operate mining hardware on your behalf. Whether you're new to crypto or just curious, BitPlayPro offers a simple, gamified way to take part. Build mining power, complete daily challenges and play games – all from your smartphone.
           </Text>
         </View>
 
@@ -132,7 +132,7 @@ const AboutUsScreen = () => {
           <View style={styles.featureItem}>
             <Icon name="cloud-outline" size={20} color="#22D3EE" />
             <View style={styles.featureTextContainer}>
-              <Text style={styles.featureTitle}>Cloud Mining Made Easy</Text>
+              <Text style={styles.featureTitle}>Bitcoin Rewards Made Easy</Text>
               <Text style={styles.featureDescription}>No rigs, no setup.</Text>
             </View>
           </View>

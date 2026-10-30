@@ -60,6 +60,8 @@
 	<string>This app uses your location to provide location-based services.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to your photo library to let you choose a profile picture.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>We use this identifier to provide you with personalized content and measure the effectiveness of ads.</string>
 	<key>RCTNewArchEnabled</key>

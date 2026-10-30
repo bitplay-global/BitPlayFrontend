@@ -15,6 +15,7 @@ import {
   Image,
   Dimensions,
   Alert,
+  Linking,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -42,6 +43,9 @@ import {
 import { trackMmpCheckoutStarted, trackMmpPurchase } from '../services/mmpAnalytics';
 
 // Import mining pack images
+
+const TERMS_URL = 'https://bitplaypro.com/terms-and-conditions/';
+const PRIVACY_URL = 'https://bitplaypro.com/privacy-policy/';
 const MiningPack01 = require('../assets/images/MiningPack01.svg').default;
 const MiningPack02 = require('../assets/images/MiningPack02.svg').default;
 const MiningPack03 = require('../assets/images/MiningPack03.svg').default;
@@ -819,6 +823,30 @@ const StoreScreen = () => {
           </View>
         )}
 
+        {/* Subscription terms, restore and legal links (App Store 3.1.1 / 3.1.2;
+            Google Play subscriptions policy). Packs are auto-renewing monthly
+            subscriptions, so this must stay visible next to the price. */}
+        <View style={styles.legalContainer}>
+          <Text style={styles.legalText}>
+            Packs are monthly subscriptions that renew automatically at the price shown until cancelled.
+            Payment is charged to your {Platform.OS === 'ios' ? 'Apple ID' : 'Google Play'} account. Cancel anytime in
+            {Platform.OS === 'ios' ? ' Settings > Apple ID > Subscriptions' : ' Google Play > Payments & subscriptions'} at
+            least 24 hours before the renewal date. Mining power is a reward in BitPlay and has no cash value.
+          </Text>
+          <TouchableOpacity onPress={handleRestorePurchases} style={styles.restoreButton} accessibilityRole="button">
+            <Text style={styles.restoreText}>Restore Purchases</Text>
+          </TouchableOpacity>
+          <View style={styles.legalLinks}>
+            <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)} accessibilityRole="link">
+              <Text style={styles.legalLink}>Terms of Use</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalText}>  ·  </Text>
+            <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)} accessibilityRole="link">
+              <Text style={styles.legalLink}>Privacy Policy</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Empty space before bottom panel */}
         <View style={styles.spacer} />
       </ScrollView>
@@ -1195,6 +1223,38 @@ const styles = StyleSheet.create({
   },
   spacer: {
     height: 100,
+  },
+  legalContainer: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  legalText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  restoreButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  restoreText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  legalLink: {
+    color: '#93C5FD',
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
   bannerTop: {
     alignItems: 'center',

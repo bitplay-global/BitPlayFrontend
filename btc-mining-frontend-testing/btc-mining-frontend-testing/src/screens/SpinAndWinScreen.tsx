@@ -16,6 +16,7 @@ import {
   Image,
   Linking,
 } from 'react-native';
+import GameRulesNote from '../components/GameRulesNote';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import LinearGradient from 'react-native-linear-gradient';
@@ -797,6 +798,7 @@ const SpinAndWinScreen: React.FC = () => {
             </View>
 
             <Text style={styles.footerHint}>Win: 5 Gh/s (×2 slots) · 3 Gh/s · 2× reward (1 Gh/s) · Try again</Text>
+            <GameRulesNote game="Spin & Win" prizes="5 GH/s, 3 GH/s, 2× reward (1 GH/s) or Try again" />
           </ScrollView>
 
           <View style={[styles.bannerWrapper, { paddingBottom: insets.bottom }]}>
