@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { BANNER_ADS_ENABLED } from '../config/adPlacements';
 import BitPlayLoader from '../components/BitPlayLoader';
 import { useFocusEffect } from '@react-navigation/native';
@@ -66,6 +66,10 @@ import {
 import { trackMmpMiningStarted } from '../services/mmpAnalytics';
 import { ApptroveSDK } from 'react-native-apptrove';
 import { getObjectFromStorage, saveObjectToStorage } from '../config/storage';
+import { GAMES } from './GameZoneScreen';
+
+const HOME_POPULAR_GAMES_KEY = 'homePopularGames:v1';
+const HOME_DEFAULT_GAMES = ['BTC Trading', 'Spin & Win', 'Memory Match'];
 import { getHomeCacheKey, isValidHomeCache, HomeCacheShape, HOME_CACHE_VERSION } from '../config/homeCache';
 // Shared with SuperPrivilegesScreen's "Watch Ads" button, which feeds this same
 // daily `rewarded_ads_watched` counter -- both must enforce the same cap.
@@ -321,29 +325,43 @@ const Page: React.FC = () => {
   const [isMiningActivationPending, setIsMiningActivationPending] = useState(false);
   const [serverTimeRemaining, setServerTimeRemaining] = useState(0);
   const [stockGameBonus, setStockGameBonus] = useState(cachedHome?.stockGameBonus ?? 0);
+  const [popularGameNames, setPopularGameNames] = useState<string[]>(
+    () => (getObjectFromStorage(HOME_POPULAR_GAMES_KEY) as string[] | null) ?? [],
+  );
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      fetch(`${get_data_uri('GAME_SESSIONS_POPULAR')}?limit=10`)
+        .then(r => r.json())
+        .then(d => {
+          if (cancelled || !d?.success || !Array.isArray(d.popular)) return;
+          const names = d.popular.map((p: { gameName?: string }) => p.gameName).filter(Boolean) as string[];
+          setPopularGameNames(names);
+          saveObjectToStorage(HOME_POPULAR_GAMES_KEY, names);
+        })
+        .catch(() => {});
+      return () => { cancelled = true; };
+    }, []),
+  );
 
-  // Fixed 3 games — BTC Trading, Spin and Win, Memory Match
-  const DEFAULT_FEATURED: Array<{ name: string; route: string; hint: string; iconImage: any }> = [
-    {
-      name: 'BTC Trading',
-      route: 'TradingScreen',
-      hint: 'Predict price · +10\nGH/s',
-      iconImage: require('../assets/images/icon_btc_trading.png'),
-    },
-    {
-      name: 'Spin and Win',
-      route: 'SpinAndWin',
-      hint: 'Wheel · Gh/s &\nvideos',
-      iconImage: require('../assets/images/icon_spin_win.png'),
-    },
-    {
-      name: 'Memory Match',
-      route: 'MemoryCardMatch',
-      hint: '30 sec · Claim +10\nGH/s',
-      iconImage: require('../assets/images/icon_memory_match.png'),
-    },
-  ];
-  const [featuredGames] = useState(DEFAULT_FEATURED);
+  // Play & Earn: the 3 most played games (backend GET /api/game-sessions/popular,
+  // game wins claimed over the last 30 days), drawn from the Game Zone's list
+  // so names, icons and reward labels match it. Until there is enough data --
+  // or offline -- the slots fall back to BTC Trading, Spin & Win, Memory Match.
+  // The last list is cached so Home shows it instantly on the next open.
+  const featuredGames = useMemo(() => {
+    const pick = (names: string[]) => {
+      const out: typeof GAMES = [];
+      for (const n of names) {
+        const g = GAMES.find(x => x.name === n);
+        if (g && !out.includes(g)) out.push(g);
+        if (out.length === 3) break;
+      }
+      return out;
+    };
+    const chosen = pick([...popularGameNames, ...HOME_DEFAULT_GAMES]);
+    return chosen.map(g => ({ name: g.name, route: g.route as string, hint: `${g.desc}\n${g.rewardLabel}`, iconImage: g.iconImage }));
+  }, [popularGameNames]);
 
   //  console.log("isMiningActivationPending: ", isMiningActivationPending);
   //  console.log("isMiningEnabled: ", isMiningEnabled);
