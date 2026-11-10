@@ -17,6 +17,7 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { RootStackParamList } from '../components/types';
@@ -111,6 +112,11 @@ const postPurchaseWithRetry = async (url: string, payload: unknown, headers: Rec
 };
 
 const StoreScreen = () => {
+  // Real safe-area insets, not guessed status-bar heights: the app draws
+  // edge-to-edge (Android 15/16 enforce it), so the top and bottom bars overlap
+  // the screen unless it pads by what the device reports.
+  const insets = useSafeAreaInsets();
+
   const { user } = useAuth();
   // Server-configured banner unit, same source HomeScreen uses. The hardcoded
   // DEFAULT_ADMOB_BANNER_ID is only a last-resort fallback -- on iOS that unit
@@ -675,7 +681,7 @@ const StoreScreen = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" />
 
       {/* Header: logo + BitPlayPro Store */}
@@ -926,7 +932,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    marginTop: Platform.OS === 'ios' ? 50 : 45,
+    marginTop: 8,
   },
   headerLogoWrap: {
     width: 32,

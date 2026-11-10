@@ -5,13 +5,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Platform,
   Share,
   Alert,
   ImageBackground,
   Modal,
   Linking,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -36,6 +36,11 @@ function getDeviceIanaTimezone(): string | null {
 type NavigationProp = StackNavigationProp<RootStackParamList, 'MyProfileScreen'>;
 
 const MyProfileScreen = () => {
+  // Real safe-area insets, not guessed status-bar heights: the app draws
+  // edge-to-edge (Android 15/16 enforce it), so the top and bottom bars overlap
+  // the screen unless it pads by what the device reports.
+  const insets = useSafeAreaInsets();
+
   const navigation = useNavigation<NavigationProp>();
   const { user, logout } = useAuth();
 
@@ -141,7 +146,7 @@ const MyProfileScreen = () => {
   return (
     <ImageBackground
       source={require('../assets/images/bg_pattern.png')}
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top }]}
       resizeMode="cover"
     >
       {/* Overlay to darken background */}
@@ -376,7 +381,7 @@ const MyProfileScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 50 : 0,
+    paddingTop: 0,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -388,7 +393,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    marginTop: Platform.OS === 'ios' ? 0 : 35,
+    marginTop: 8,
     zIndex: 1,
   },
   topBarTitle: {

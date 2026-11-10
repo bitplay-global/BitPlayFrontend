@@ -14,6 +14,7 @@ import {
   useColorScheme,
   KeyboardAvoidingView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -32,6 +33,11 @@ const getProfileCacheKey = (userId: string) => `profile_edit_cache_${userId}`;
 const EMPTY_PROFILE_FORM = { name: '', gender: '', phoneNumber: '', country: '', city: '' };
 
 const MyProfileEditScreen = () => {
+  // Real safe-area insets, not guessed status-bar heights: the app draws
+  // edge-to-edge (Android 15/16 enforce it), so the top and bottom bars overlap
+  // the screen unless it pads by what the device reports.
+  const insets = useSafeAreaInsets();
+
   const navigation = useNavigation<NavigationProp>();
   const { user, updateUser } = useAuth();
   const colorScheme = useColorScheme();
@@ -165,7 +171,7 @@ const MyProfileEditScreen = () => {
 
   if (!hasCache && isLoading) {
     return (
-      <ImageBackground source={require('../assets/images/bg_pattern.png')} style={styles.container} resizeMode="cover">
+      <ImageBackground source={require('../assets/images/bg_pattern.png')} style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]} resizeMode="cover">
         <View style={styles.overlay} />
         <View style={styles.loadingContainer}>
           <BitPlayLoader size="lg" label="Loading profile..." />
@@ -175,7 +181,7 @@ const MyProfileEditScreen = () => {
   }
 
   return (
-    <ImageBackground source={require('../assets/images/bg_pattern.png')} style={styles.container} resizeMode="cover">
+    <ImageBackground source={require('../assets/images/bg_pattern.png')} style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]} resizeMode="cover">
       <View style={styles.overlay} />
 
       <View style={styles.topBar}>
@@ -329,12 +335,12 @@ const MyProfileEditScreen = () => {
 };
 
 const getStyles = (isDarkMode: boolean) => StyleSheet.create({
-  container: { flex: 1, paddingTop: Platform.OS === 'ios' ? 50 : 0 },
+  container: { flex: 1 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: isDarkMode ? 'rgba(10, 22, 40, 0.85)' : 'rgba(255,255,255,0.90)' },
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 16,
-    marginTop: Platform.OS === 'ios' ? 0 : 35, zIndex: 1,
+    marginTop: 8, zIndex: 1,
   },
   topBarTitle: { color: isDarkMode ? '#fff' : '#1F2937', fontSize: 18, fontWeight: '600' },
   scrollContent: { paddingHorizontal: 16, paddingTop: 12, zIndex: 1 },

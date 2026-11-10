@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -30,6 +31,11 @@ const STREAK_TIERS = [
 ];
 
 const AchievementsScreen = () => {
+  // Real safe-area insets, not guessed status-bar heights: the app draws
+  // edge-to-edge (Android 15/16 enforce it), so the top and bottom bars overlap
+  // the screen unless it pads by what the device reports.
+  const insets = useSafeAreaInsets();
+
   type SidebarNavigationProp = StackNavigationProp<RootStackParamList, 'AchievementsScreen'>;
   const navigation = useNavigation<SidebarNavigationProp>();
   const { user } = useAuth();
@@ -86,7 +92,7 @@ const AchievementsScreen = () => {
   const isMaxTier = activeTierIdx === STREAK_TIERS.length - 1;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backRow}>
           <Icon name="chevron-back" size={22} color="white" />
@@ -231,7 +237,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: 8,
     paddingBottom: 16,
   },
   backRow: {
