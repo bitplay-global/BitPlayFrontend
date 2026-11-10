@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { get_data_uri } from '../config/api';
@@ -16,6 +17,11 @@ import { useAuth } from '../auth/AuthProvider';
 import { CommonActions } from '@react-navigation/native';
 
 const CryptoDepositScreen = ({ navigation, route }: any) => {
+  // Real safe-area insets, not guessed status-bar heights: the app draws
+  // edge-to-edge (Android 15/16 enforce it), so the top and bottom bars overlap
+  // the screen unless it pads by what the device reports.
+  const insets = useSafeAreaInsets();
+
   const { amount, currency, notes } = route.params;
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -104,7 +110,7 @@ const handleConfirmDeposit = async () => {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
 
       {/* Error State */}
       {error && (
@@ -256,7 +262,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   topBar: {
-    paddingVertical: Platform.OS === 'ios' ? 80 : 20,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

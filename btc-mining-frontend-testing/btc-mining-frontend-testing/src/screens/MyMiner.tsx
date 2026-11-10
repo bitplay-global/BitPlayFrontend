@@ -9,6 +9,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../components/types';
@@ -68,6 +69,11 @@ const MY_MINER_CACHE_VERSION = 1;
 const getMyMinerCacheKey = (userId: string) => `my_miner_cache_${userId}`;
 
 const MyMiner = () => {
+  // Real safe-area insets, not guessed status-bar heights: the app draws
+  // edge-to-edge (Android 15/16 enforce it), so the top and bottom bars overlap
+  // the screen unless it pads by what the device reports.
+  const insets = useSafeAreaInsets();
+
   const navigation = useNavigation<NavigationProp>();
   const { user } = useAuth();
   const { ads } = useAdConfig();
@@ -206,7 +212,7 @@ const MyMiner = () => {
   }, [user?.id]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {/* Top Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -435,7 +441,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
-    marginTop: Platform.OS === 'ios' ? 50 : 45,
+    marginTop: 8,
   },
   topBarTitle: {
     color: '#fff',
