@@ -1,12 +1,13 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import LinearGradient from 'react-native-linear-gradient';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../../auth/AuthProvider';
 import { get_data_uri } from '../../config/api';
 
 /**
- * Game Zone header card: the daily game streak and this week's leaderboard.
+ * Game Zone header: the daily game streak and this week's leaderboard.
  * Data from GET /api/user_mining/game-engagement/:userId (backend
  * helpers/gameEngagement.js). Days count when a game reward is claimed;
  * days 3, 5 and 7 of each week-long cycle pay bonus GH/s for 24 hours.
@@ -18,13 +19,53 @@ type Streak = {
 type Row = { rank: number; name: string; gh: number; wins: number; isMe: boolean };
 type Data = { streak: Streak; leaderboard: { rows: Row[] }; me: { gh: number; rank: number | null } };
 
-const MILESTONES = [{ day: 3, gh: 10 }, { day: 5, gh: 20 }, { day: 7, gh: 30 }];
+const PRIZE: Record<number, number> = { 3: 10, 5: 20, 7: 30 };
+const DAYS = [1, 2, 3, 4, 5, 6, 7];
 const MEDAL = ['#FFD24C', '#C7CEDA', '#D68A4C'];
+const GOLD = '#FBBF24';
+const CYAN = '#18D4F2';
+
+function StreakTrack({ cycleDay }: { cycleDay: number }) {
+  const fill = cycleDay <= 1 ? 0 : ((cycleDay - 1) / 6) * 100;
+  return (
+    <View style={s.track}>
+      <View style={s.rail} />
+      <LinearGradient
+        colors={['#F59E0B', GOLD]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={[s.railFill, { width: `${fill * 0.86}%` }]}
+      />
+      <View style={s.nodes}>
+        {DAYS.map(day => {
+          const done = day <= cycleDay;
+          const prize = PRIZE[day];
+          return (
+            <View key={day} style={s.nodeCol}>
+              <View style={[s.node, prize ? s.nodePrize : null, done && s.nodeDone]}>
+                {prize ? (
+                  <MaterialCommunityIcons name={done ? 'check-bold' : 'gift'} size={14} color={done ? '#1A1206' : GOLD} />
+                ) : done ? (
+                  <MaterialCommunityIcons name="check-bold" size={11} color="#1A1206" />
+                ) : (
+                  <Text style={s.nodeTxt}>{day}</Text>
+                )}
+              </View>
+              <Text style={[s.nodeLabel, prize ? s.nodeLabelPrize : null]} numberOfLines={1}>
+                {prize ? `+${prize}` : ' '}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 export default function GameEngagementCard() {
   const { user } = useAuth();
   const [data, setData] = useState<Data | null>(null);
-  const [showBoard, setShowBoard] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -40,82 +81,121 @@ export default function GameEngagementCard() {
 
   if (!data) return null;
   const { streak, leaderboard, me } = data;
-  const rows = leaderboard.rows.slice(0, showBoard ? 20 : 3);
+  const rows = leaderboard.rows.slice(0, expanded ? 20 : 3);
+  const active = streak.streakDays > 0;
+  const hint = streak.playedToday
+    ? `${streak.daysToNextBonus} ${streak.daysToNextBonus === 1 ? 'day' : 'days'} to +${streak.nextBonusGh} GH/s`
+    : active ? 'Win a game today to keep it' : 'Win a game to start';
 
   return (
-    <View style={s.card}>
+    <View style={s.wrap}>
       {/* Streak */}
-      <View style={s.row}>
-        <MaterialCommunityIcons name="fire" size={20} color="#F59E0B" />
-        <Text style={s.title}>Game Streak: {streak.streakDays} {streak.streakDays === 1 ? 'day' : 'days'}</Text>
-      </View>
-      <View style={s.steps}>
-        {Array.from({ length: 7 }, (_, i) => {
-          const day = i + 1;
-          const done = day <= streak.cycleDay;
-          const prize = MILESTONES.find(m => m.day === day);
-          return (
-            <View key={day} style={[s.step, done && s.stepDone, prize && s.stepPrize]}>
-              <Text style={[s.stepTxt, done && s.stepTxtDone]}>{prize ? `+${prize.gh}` : day}</Text>
-            </View>
-          );
-        })}
-      </View>
-      <Text style={s.sub}>
-        {streak.playedToday
-          ? `Today counted. ${streak.daysToNextBonus === 0 ? '' : `${streak.daysToNextBonus} more ${streak.daysToNextBonus === 1 ? 'day' : 'days'} to +${streak.nextBonusGh} GH/s.`}`
-          : 'Win and claim any game reward today to keep your streak.'}
-      </Text>
+      <LinearGradient colors={['#2A1B0A', '#141019']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.streakCard}>
+        <View style={s.streakHead}>
+          <LinearGradient colors={active ? ['#F59E0B', '#EF4444'] : ['#3A3F4B', '#2A2E38']} style={s.flame}>
+            <MaterialCommunityIcons name="fire" size={24} color="#FFF" />
+          </LinearGradient>
+          <View style={s.streakText}>
+            <Text style={s.streakTitle} numberOfLines={1}>
+              {active ? `${streak.streakDays}-day streak` : 'Daily streak'}
+            </Text>
+            <Text style={s.streakHint} numberOfLines={1}>{hint}</Text>
+          </View>
+          <View style={[s.pill, streak.playedToday ? s.pillDone : s.pillTodo]}>
+            <Text style={[s.pillTxt, streak.playedToday ? s.pillTxtDone : s.pillTxtTodo]}>
+              {streak.playedToday ? 'Done today' : 'Play today'}
+            </Text>
+          </View>
+        </View>
+        <StreakTrack cycleDay={streak.cycleDay} />
+      </LinearGradient>
 
       {/* Leaderboard */}
-      <View style={[s.row, { marginTop: 14 }]}>
-        <MaterialCommunityIcons name="trophy" size={18} color="#FFD24C" />
-        <Text style={s.title}>Top Players This Week</Text>
-      </View>
-      {rows.length === 0 ? (
-        <Text style={s.sub}>No winners yet this week — be the first!</Text>
-      ) : rows.map(r => (
-        <View key={r.rank} style={[s.lbRow, r.isMe && s.lbMe]}>
-          <Text style={[s.lbRank, { color: MEDAL[r.rank - 1] ?? '#94A3B8' }]}>#{r.rank}</Text>
-          <Text style={s.lbName} numberOfLines={1}>{r.isMe ? `${r.name} (you)` : r.name}</Text>
-          <Text style={s.lbGh}>{r.gh} GH/s</Text>
+      <View style={s.boardCard}>
+        <View style={s.boardHead}>
+          <MaterialCommunityIcons name="trophy" size={16} color={GOLD} />
+          <Text style={s.boardTitle}>Top Players</Text>
+          <Text style={s.boardReset}>Resets Monday</Text>
         </View>
-      ))}
-      <Text style={s.sub}>
-        {me.rank ? `You: #${me.rank} with ${me.gh} GH/s from games this week.` : 'Claim a game reward to join this week’s board.'}
-        {' '}Resets every Monday (UTC).
-      </Text>
-      {leaderboard.rows.length > 3 && (
-        <TouchableOpacity onPress={() => setShowBoard(v => !v)} style={s.more} accessibilityRole="button">
-          <Text style={s.moreTxt}>{showBoard ? 'Show less' : 'See top 20'}</Text>
-        </TouchableOpacity>
-      )}
+        {rows.length === 0 ? (
+          <Text style={s.empty}>No winners yet this week. Be the first!</Text>
+        ) : rows.map(r => (
+          <View key={r.rank} style={[s.row, r.isMe && s.rowMe]}>
+            <View style={[s.rank, { backgroundColor: (MEDAL[r.rank - 1] ?? '#64748B') + '26' }]}>
+              <Text style={[s.rankTxt, { color: MEDAL[r.rank - 1] ?? '#94A3B8' }]}>{r.rank}</Text>
+            </View>
+            <Text style={s.name} numberOfLines={1}>{r.isMe ? `${r.name} (you)` : r.name}</Text>
+            <Text style={s.gh}>{r.gh} GH/s</Text>
+          </View>
+        ))}
+        <View style={s.boardFoot}>
+          <Text style={s.footTxt} numberOfLines={1}>
+            {me.rank ? `You: #${me.rank} · ${me.gh} GH/s` : 'Win a game to join the board'}
+          </Text>
+          {leaderboard.rows.length > 3 && (
+            <TouchableOpacity onPress={() => setExpanded(v => !v)} accessibilityRole="button" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={s.more}>{expanded ? 'Show less' : 'See top 20'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
     </View>
   );
 }
 
+const NODE = 26;
 const s = StyleSheet.create({
-  card: {
-    marginHorizontal: 16, marginTop: 12, padding: 14, borderRadius: 16,
-    backgroundColor: 'rgba(15,23,42,0.85)', borderWidth: 1, borderColor: 'rgba(148,163,184,0.18)',
+  wrap: { marginHorizontal: 24, marginTop: 8, marginBottom: 12, gap: 10 },
+
+  streakCard: { borderRadius: 18, padding: 14, borderWidth: 1, borderColor: 'rgba(245,158,11,0.22)' },
+  streakHead: { flexDirection: 'row', alignItems: 'center' },
+  flame: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  streakText: { flex: 1, marginLeft: 10, marginRight: 8 },
+  streakTitle: { color: '#F8FAFC', fontSize: 16, fontWeight: '800' },
+  streakHint: { color: '#CBB994', fontSize: 12, marginTop: 2 },
+  pill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
+  pillDone: { backgroundColor: 'rgba(74,222,128,0.12)', borderColor: 'rgba(74,222,128,0.35)' },
+  pillTodo: { backgroundColor: 'rgba(251,191,36,0.1)', borderColor: 'rgba(251,191,36,0.35)' },
+  pillTxt: { fontSize: 11, fontWeight: '700' },
+  pillTxtDone: { color: '#86EFAC' },
+  pillTxtTodo: { color: GOLD },
+
+  track: { marginTop: 14 },
+  rail: {
+    position: 'absolute', top: NODE / 2 - 1.5, left: '7%', right: '7%', height: 3,
+    borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.1)',
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { color: '#F8FAFC', fontSize: 15, fontWeight: '800' },
-  sub: { color: '#94A3B8', fontSize: 12, marginTop: 8, lineHeight: 17 },
-  steps: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  step: {
-    width: 38, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(148,163,184,0.12)',
+  railFill: { position: 'absolute', top: NODE / 2 - 1.5, left: '7%', height: 3, borderRadius: 2 },
+  nodes: { flexDirection: 'row', justifyContent: 'space-between' },
+  nodeCol: { width: '14.28%', alignItems: 'center' },
+  node: {
+    width: NODE, height: NODE, borderRadius: NODE / 2, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#1E1A22', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
   },
-  stepPrize: { borderWidth: 1, borderColor: 'rgba(245,158,11,0.6)' },
-  stepDone: { backgroundColor: 'rgba(245,158,11,0.85)' },
-  stepTxt: { color: '#CBD5E1', fontSize: 11.5, fontWeight: '700' },
-  stepTxtDone: { color: '#111827' },
-  lbRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 6, borderRadius: 8, marginTop: 4 },
-  lbMe: { backgroundColor: 'rgba(24,212,242,0.12)' },
-  lbRank: { width: 34, fontWeight: '800', fontSize: 13 },
-  lbName: { flex: 1, color: '#E2E8F0', fontSize: 13.5 },
-  lbGh: { color: '#18D4F2', fontWeight: '700', fontSize: 13 },
-  more: { alignSelf: 'center', marginTop: 8, paddingVertical: 4, paddingHorizontal: 10 },
-  moreTxt: { color: '#93C5FD', fontSize: 12.5, fontWeight: '700', textDecorationLine: 'underline' },
+  nodePrize: { borderColor: 'rgba(251,191,36,0.7)', backgroundColor: '#2A2011' },
+  nodeDone: { backgroundColor: GOLD, borderColor: GOLD },
+  nodeTxt: { color: '#94A3B8', fontSize: 11, fontWeight: '700' },
+  nodeLabel: { marginTop: 4, fontSize: 10.5, color: 'transparent' },
+  nodeLabelPrize: { color: GOLD, fontWeight: '800' },
+
+  boardCard: {
+    borderRadius: 18, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10,
+    backgroundColor: '#0B111D', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  boardHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  boardTitle: { flex: 1, color: '#F8FAFC', fontSize: 14, fontWeight: '800' },
+  boardReset: { color: '#7E8CA3', fontSize: 11 },
+  empty: { color: '#94A3B8', fontSize: 12.5, paddingVertical: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4, borderRadius: 10 },
+  rowMe: { backgroundColor: 'rgba(24,212,242,0.1)' },
+  rank: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  rankTxt: { fontSize: 12, fontWeight: '800' },
+  name: { flex: 1, color: '#E2E8F0', fontSize: 13.5, fontWeight: '600', marginRight: 8 },
+  gh: { color: CYAN, fontSize: 13, fontWeight: '700' },
+  boardFoot: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, paddingTop: 8,
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  footTxt: { flex: 1, color: '#94A3B8', fontSize: 12, marginRight: 8 },
+  more: { color: CYAN, fontSize: 12, fontWeight: '700' },
 });
