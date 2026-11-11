@@ -360,7 +360,7 @@ const Page: React.FC = () => {
       return out;
     };
     const chosen = pick([...popularGameNames, ...HOME_DEFAULT_GAMES]);
-    return chosen.map(g => ({ name: g.name, route: g.route as string, hint: `${g.desc}\n${g.rewardLabel}`, iconImage: g.iconImage }));
+    return chosen.map(g => ({ name: g.name, route: g.route as string, hint: g.rewardLabel, iconImage: g.iconImage }));
   }, [popularGameNames]);
 
   //  console.log("isMiningActivationPending: ", isMiningActivationPending);
@@ -1120,15 +1120,40 @@ const Page: React.FC = () => {
     }
   };
 
+  // The toggle turns on optimistically when the activation ad opens. If the ad
+  // closes or fails without a reward, shouldClaimDailyRewardRef is still set
+  // (handleReward clears it), so mining never started: turn the toggle back
+  // off rather than leaving it saying "Activated" at 0 GH/s.
+  const handleActivationAdClosed = () => {
+    if (!shouldClaimDailyRewardRef.current) return;
+    shouldClaimDailyRewardRef.current = false;
+    miningActivatedLocallyRef.current = false;
+    setIsMiningEnabled(false);
+    Alert.alert('Ad not completed', 'Please watch the full video to start mining.');
+  };
+
   const { show: showActivationAd, loading: activationLoading, loaded: activationLoaded } = useRewardedVideoAd(handleReward, {
     primaryUnitId: ads.rewardedVideoId,
-  });
+  }, handleActivationAdClosed);
+  // Read when the user answers the Start Mining dialog, which can be well after
+  // the render that opened it.
+  const activationLoadedRef = useRef(activationLoaded);
+  activationLoadedRef.current = activationLoaded;
   const { show: showFiveGhAd, loading: fiveGhLoading, loaded: fiveGhLoaded } = useRewardedVideoAd(handleReward, {
     primaryUnitId: ads.rewardedVideoId,
   });
   const { show: showThreeGh, loading: threeGhLoading, loaded: threeGhLoaded } = useRewardedVideoAd(handleThreeGhReward, {
     primaryUnitId: ads.rewardedVideoId,
   });
+
+  // show() on an ad that isn't ready only requests a new one, so without this
+  // the Claim button looked like it did nothing.
+  const openVideoClaimAd = () => {
+    showFiveGhAd();
+    if (!fiveGhLoaded) {
+      Alert.alert('Almost ready', 'The video is still loading. Please try again in a few seconds.');
+    }
+  };
 
   // If user attempted activation while ads were loading, stop showing loader once ads are ready or mining is enabled.
   useEffect(() => {
@@ -1965,6 +1990,15 @@ const Page: React.FC = () => {
                         {
                           text: 'OK',
                           onPress: async () => {
+                            if (!activationLoadedRef.current) {
+                              // No ad to show (still loading, or none available):
+                              // show() only requests one, and nothing would ever
+                              // start mining. Say so and leave the toggle off.
+                              setIsMiningEnabled(false);
+                              showActivationAd();
+                              Alert.alert('Almost ready', 'The video is still loading. Please try again in a few seconds.');
+                              return;
+                            }
                             setStartTime(null);
                             setIsMiningEnabled(true);
                             miningActivatedLocallyRef.current = true;
@@ -2187,7 +2221,7 @@ const Page: React.FC = () => {
               Alert.alert('No Connection', 'Please check your internet connection and try again.');
               return;
             }
-            showFiveGhAd();
+            openVideoClaimAd();
           }}>
             {/* Top Row */}
             <View style={styles.claimTopRow}>
@@ -2234,7 +2268,7 @@ const Page: React.FC = () => {
                   Alert.alert('No Connection', 'Please check your internet connection and try again.');
                   return;
                 }
-                showFiveGhAd();
+                openVideoClaimAd();
               }}
               text={buttonLabel}
               enabled={!fiveGhLoading && adsWatched < MAX_VIDEO_CLAIMS_PER_TRACK_PER_DAY}
