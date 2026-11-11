@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import React from 'react';
 import LinearGradient from 'react-native-linear-gradient';
-import { formatBtc, formatSats } from '../../utils/sats';
 
 const { width } = Dimensions.get('window');
 const scale = width / 375; // Base width (iPhone 11/X/XR size)
@@ -23,11 +22,8 @@ const BalanceCard = ({
   showUSd,
   buttonText,
   handleButtonPress,
-  btcValue,
 }: {
   balance: string;
-  /** When given (and not in USD mode), shows sats as the main figure with BTC beneath. */
-  btcValue?: number | null;
   showUSd: boolean;
   handleButtonPress: () => void;
   buttonText: string;
@@ -59,21 +55,10 @@ const BalanceCard = ({
         </TouchableOpacity>
       </View>
 
-      {!showUSd && btcValue != null && Number.isFinite(btcValue) ? (
-        <View>
-          <Text style={styles.satsBalance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-            {formatSats(btcValue)}
-          </Text>
-          <Text style={styles.btcSecondary} numberOfLines={1}>
-            {formatBtc(btcValue)} BTC
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.balanceContainer}>
-          <Text style={styles.balance}>{balance}</Text>
-          <Text style={styles.unit}> {showUSd ? '$' : 'BTC'} </Text>
-        </View>
-      )}
+      <View style={styles.balanceContainer}>
+        <Text style={styles.balance}>{balance}</Text>
+        <Text style={styles.unit}> {showUSd ? '$' : 'BTC'} </Text>
+      </View>
     </View>
   );
 };
@@ -168,16 +153,5 @@ const styles = StyleSheet.create({
     fontSize: normalize(16),
     fontWeight: '500',
     color: '#fff',
-  },
-  satsBalance: {
-    fontSize: normalize(28),
-    fontWeight: '700',
-    color: '#FBBF24',
-  },
-  btcSecondary: {
-    marginTop: 2,
-    fontSize: normalize(13),
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontVariant: ['tabular-nums'],
   },
 });

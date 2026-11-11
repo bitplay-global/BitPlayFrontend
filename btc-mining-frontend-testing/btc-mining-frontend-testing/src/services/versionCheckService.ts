@@ -16,11 +16,24 @@ import { SERVER_BASE_URL } from '../config/api';
 const ANDROID_PACKAGE_ID = 'com.bitplay.app';
 const IOS_BUNDLE_ID = 'com.bitplaypro.bitplaypro';
 
-/** Compare two version strings (e.g. "1.0.18" vs "1.0.19"). Returns: 1 if a > b, -1 if a < b, 0 if equal. */
+/**
+ * The dotted number in a version string ("version 64" -> "64", "2.0.3" ->
+ * "2.0.3"), or "" when there is none. The App Store reports whatever was typed
+ * as the version name -- BitPlay's live one is "version 64" -- and a plain
+ * split on "." made that NaN, so the comparison never found an update.
+ */
+export function versionNumber(v: string | null | undefined): string {
+  return String(v ?? '').match(/\d+(?:\.\d+)*/)?.[0] ?? '';
+}
+
+/** Compare two version strings (e.g. "1.0.18" vs "1.0.19"). Returns: 1 if a > b, -1 if a < b, 0 if equal or unreadable. */
 export function compareVersions(a: string, b: string): number {
+  const va = versionNumber(a);
+  const vb = versionNumber(b);
+  if (!va || !vb) return 0; // unreadable: never prompt on a guess
   const parse = (v: string) => v.split('.').map(Number);
-  const partsA = parse(a);
-  const partsB = parse(b);
+  const partsA = parse(va);
+  const partsB = parse(vb);
   const len = Math.max(partsA.length, partsB.length);
   for (let i = 0; i < len; i++) {
     const na = partsA[i] ?? 0;
@@ -72,8 +85,11 @@ async function getLatestVersionAndroid(): Promise<string | null> {
     });
     if (!res.ok) return null;
     const html = await res.text();
-    // Pattern that often appears in Play Store page for version
-    const match = html.match(/\[\[\["(\d+\.\d+(?:\.\d+)?(?:\.\d+)?)"\]\]\]/);
+    // The page carries the version as [[["2.0.3"]], (two closing brackets,
+    // then the target SDK). The old pattern wanted three and never matched,
+    // so the update prompt never appeared on Android. Checked against the live
+    // page, phone and desktop variants: exactly one match, the version.
+    const match = html.match(/\[\[\["(\d+(?:\.\d+){1,3})"\]\]/);
     if (match?.[1]) return match[1];
     // Fallback: look for softwareVersion or similar
     const alt = html.match(/"softwareVersion"\s*:\s*"([^"]+)"/);

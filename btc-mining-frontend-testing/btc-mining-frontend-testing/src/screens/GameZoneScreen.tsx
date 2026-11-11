@@ -6,13 +6,12 @@ import {
   LayoutChangeEvent,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import LinearGradient from 'react-native-linear-gradient';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { StatusBar } from 'react-native';
 import { RootStackParamList } from '../components/types';
-import { get_data_uri, getMobileSecurityHeaders } from '../config/api';
 import { BannerAdSlot } from '../components/ads/BannerAdSlot';
 import { BannerAdSize } from 'react-native-google-mobile-ads';
 import { DEFAULT_ADMOB_BANNER_ID } from '../services/adUnitDefaults';
@@ -96,13 +95,6 @@ const CATEGORIES = [
   { key: 'All' },
 ];
 
-interface PopularGame {
-  gameName: string;
-  totalSessions: number;
-  uniquePlayers: number;
-  popularityScore: number;
-}
-
 /** Wraps any pressable in a gentle scale-down/spring-back — the app's one shared press micro-interaction. */
 function PressScale({
   children, onPress, style, disabled,
@@ -118,30 +110,6 @@ function PressScale({
     </Animated.View>
   );
 }
-
-function SkeletonCard() {
-  const anim = useRef(new Animated.Value(0.4)).current;
-  useEffect(() => {
-    Animated.loop(Animated.sequence([
-      Animated.timing(anim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
-    ])).start();
-  }, [anim]);
-  return (
-    <Animated.View style={[sk.card, { opacity: anim }]}>
-      <View style={sk.iconBox} />
-      <View style={sk.line1} />
-      <View style={sk.line2} />
-    </Animated.View>
-  );
-}
-
-const sk = StyleSheet.create({
-  card: { width: '47%', backgroundColor: '#0B111D', borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  iconBox: { width: '100%', height: 88, borderRadius: 12, backgroundColor: '#101827', marginBottom: 10 },
-  line1: { height: 14, backgroundColor: '#101827', borderRadius: 6, marginBottom: 6, width: '70%' },
-  line2: { height: 10, backgroundColor: '#0E1522', borderRadius: 6, width: '90%' },
-});
 
 // 8px-based spacing scale — kept file-local, matching this codebase's
 // established convention of per-screen constants (no centralized theme file
@@ -171,9 +139,6 @@ export default function GameZoneScreen() {
   const bannerUnitId = ads?.homeBannerId ?? DEFAULT_ADMOB_BANNER_ID;
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('Featured');
-  const [popular, setPopular] = useState<PopularGame[]>([]);
-  const [sessionCounts, setSessionCounts] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
   const [featuredIndex, setFeaturedIndex] = useState(0);
   // Measured height of the fixed bottom ad bar, so scrollable content can
   // reserve exactly enough space to never slide underneath it. Starts at a
@@ -193,7 +158,6 @@ export default function GameZoneScreen() {
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const gridAnim = useRef(new Animated.Value(0)).current;
-  const hotAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -202,42 +166,11 @@ export default function GameZoneScreen() {
     ]).start();
   }, []);
 
-  const fetchPopular = useCallback(async () => {
-    try {
-      const url = `${get_data_uri('GAME_SESSIONS_POPULAR')}?limit=30`;
-      const res = await fetch(url, { headers: getMobileSecurityHeaders() });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.popular)) {
-        setPopular(data.popular.slice(0, 3));
-        const counts: Record<string, number> = {};
-        data.popular.forEach((g: PopularGame) => { counts[g.gameName] = g.totalSessions; });
-        setSessionCounts(counts);
-      }
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(useCallback(() => { fetchPopular(); }, [fetchPopular]));
-
-  // Fade the hot-games row in the moment real data actually arrives, rather
-  // than animating on mount against still-empty state.
-  useEffect(() => {
-    if (popular.length > 0) {
-      Animated.timing(hotAnim, { toValue: 1, duration: 450, useNativeDriver: true }).start();
-    }
-  }, [popular.length, hotAnim]);
-
-  const hotNames = new Set(popular.map(g => g.gameName));
   const filtered = GAMES.filter(g => {
     const matchCat = activeCategory === 'All' || g.category === activeCategory;
     const matchSearch = g.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
-
-  const RANK_COLOR = ['#FFD24C', '#C7CEDA', '#D68A4C'];
 
   const onFeaturedScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const idx = Math.round(e.nativeEvent.contentOffset.x / SLIDE_STRIDE);
@@ -293,56 +226,6 @@ export default function GameZoneScreen() {
           {/* Game streak + weekly leaderboard */}
           <GameEngagementCard />
 
-          {/* Hot / Popular section */}
-          {(loading || popular.length > 0) && (
-            <View style={styles.hotSection}>
-              <View style={styles.sectionTitleRow}>
-                <View style={styles.sectionTitleWithIcon}>
-                  <MaterialCommunityIcons name="fire" size={15} color="#f59e0b" />
-                  <Text style={styles.hotSectionTitle}>Most Played This Month</Text>
-                </View>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hotRow}>
-                {loading ? (
-                  [0, 1, 2].map(i => (
-                    <View key={i} style={styles.hotCardSkeleton}>
-                      <Animated.View style={{ flex: 1, opacity: headerAnim }} />
-                    </View>
-                  ))
-                ) : (
-                  <Animated.View style={[styles.hotRow, { opacity: hotAnim, transform: [{ translateY: hotAnim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}>
-                    {popular.map((p, idx) => {
-                      const game = GAMES.find(g => g.name === p.gameName);
-                      if (!game) return null;
-                      return (
-                        <PressScale key={game.route} onPress={() => navigation.navigate(game.route as any)}>
-                          <View style={styles.hotCard}>
-                            <View style={[styles.hotRankBadge, { backgroundColor: RANK_COLOR[idx] + '22', borderColor: RANK_COLOR[idx] + '55' }]}>
-                              <Text style={[styles.hotRankTxt, { color: RANK_COLOR[idx] }]}>#{idx + 1}</Text>
-                            </View>
-                            <View style={[styles.hotIconBg, { backgroundColor: game.color + '1c' }]}>
-                              {game.iconImage ? (
-                                <Image source={game.iconImage} style={styles.hotIconImg} resizeMode="cover" />
-                              ) : (
-                                <MaterialCommunityIcons name={game.icon} size={26} color={game.color} />
-                              )}
-                            </View>
-                            <Text style={styles.hotName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{game.name}</Text>
-                            <Text style={styles.hotPlays}>{p.totalSessions.toLocaleString()} plays</Text>
-                            <View style={styles.hotPlayPill}>
-                              <MaterialCommunityIcons name="play" size={11} color="#18D4F2" />
-                              <Text style={styles.hotPlayTxt}>PLAY</Text>
-                            </View>
-                          </View>
-                        </PressScale>
-                      );
-                    })}
-                  </Animated.View>
-                )}
-              </ScrollView>
-            </View>
-          )}
-
           {/* Search */}
           <View style={styles.searchWrap}>
             <MaterialCommunityIcons name="magnify" size={17} color="#7E8CA3" style={styles.searchIcon} />
@@ -383,13 +266,7 @@ export default function GameZoneScreen() {
             <Text style={styles.sectionCount}>{filtered.length} games</Text>
           </View>
 
-          {loading ? (
-            <View style={styles.grid}>
-              <View style={styles.skeletonRow}>
-                {[0, 1, 2, 3, 4, 5].map(i => <SkeletonCard key={i} />)}
-              </View>
-            </View>
-          ) : showFeaturedCarousel ? (
+          {showFeaturedCarousel ? (
             /* Featured: large spotlight cards, one dominant card + peek of next, swipeable */
             <Animated.View style={{ opacity: gridAnim }}>
               <ScrollView
@@ -403,7 +280,6 @@ export default function GameZoneScreen() {
                 scrollEventThrottle={16}
               >
                 {filtered.map((game, i) => {
-                  const plays = sessionCounts[game.name];
                   const isLast = i === filtered.length - 1;
                   return (
                     <View key={game.route} style={{ width: SLIDE_WIDTH, marginRight: isLast ? 0 : SPACING.md }}>
@@ -428,9 +304,6 @@ export default function GameZoneScreen() {
                               <MaterialCommunityIcons name="lightning-bolt" size={14} color="#18D4F2" />
                               <Text style={styles.rewardTxt}>{game.rewardLabel}</Text>
                             </View>
-                            {plays != null && plays > 0 && (
-                              <Text style={styles.playsText}>{plays >= 1000 ? `${(plays / 1000).toFixed(1)}k` : plays} plays</Text>
-                            )}
                             <View style={styles.playNowBtn}>
                               <Text style={styles.playNowTxt}>Play Now</Text>
                               <MaterialCommunityIcons name="arrow-right" size={15} color="#18D4F2" />
@@ -455,16 +328,9 @@ export default function GameZoneScreen() {
             <Animated.View style={[styles.grid, { opacity: gridAnim, transform: [{ translateY: gridAnim.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }] }]}>
               <View style={styles.cardRow}>
                 {filtered.map(game => {
-                  const isHot = hotNames.has(game.name);
-                  const plays = sessionCounts[game.name];
                   return (
                     <PressScale key={game.route} onPress={() => navigation.navigate(game.route as any)} style={styles.card}>
                       <View style={[styles.gameArt, { backgroundColor: game.color + '10' }]}>
-                        {isHot && (
-                          <View style={styles.hotBadge}>
-                            <Text style={styles.hotBadgeTxt}>HOT</Text>
-                          </View>
-                        )}
                         {game.iconImage ? (
                           <Image source={game.iconImage} style={styles.gameArtImg} resizeMode="cover" />
                         ) : (
@@ -483,9 +349,6 @@ export default function GameZoneScreen() {
                             <MaterialCommunityIcons name="play" size={12} color="#18D4F2" />
                           </View>
                         </View>
-                        {plays != null && plays > 0 && (
-                          <Text style={styles.playsText}>{plays >= 1000 ? `${(plays / 1000).toFixed(1)}k` : plays} plays</Text>
-                        )}
                       </View>
                     </PressScale>
                   );
@@ -575,31 +438,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(11,17,29,0.4)',
   },
 
-  hotSection: { paddingTop: 4, paddingBottom: 4 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, marginBottom: SPACING.md - 4, marginTop: 4 },
   sectionTitleWithIcon: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  hotSectionTitle: { fontSize: 13.5, fontWeight: '700', color: TEXT_DIM },
   sectionTitle: { fontSize: 19, fontWeight: '800', color: TEXT, letterSpacing: -0.2 },
   sectionCount: { fontSize: 12, color: TEXT_MUTED, fontWeight: '600' },
 
-  hotRow: { flexDirection: 'row', gap: SPACING.sm + 4, paddingHorizontal: SPACING.lg, paddingBottom: 4 },
-  hotCard: {
-    width: 132, borderRadius: 16, padding: SPACING.md - 2, alignItems: 'center',
-    backgroundColor: SURFACE, borderWidth: 1, borderColor: BORDER,
-  },
-  hotCardSkeleton: { width: 132, height: 158, borderRadius: 16, backgroundColor: SURFACE, marginLeft: SPACING.lg },
-  hotRankBadge: { position: 'absolute', top: 10, left: 10, borderRadius: 8, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
-  hotRankTxt: { fontSize: 10, fontWeight: '800' },
-  hotIconBg: { width: 56, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.sm + 2, overflow: 'hidden' },
-  hotIconImg: { width: '100%', height: '100%' },
-  hotName: { fontSize: 12.5, fontWeight: '700', color: TEXT, textAlign: 'center', marginBottom: 3 },
-  hotPlays: { fontSize: 10.5, color: TEXT_MUTED, marginBottom: SPACING.sm + 2, fontVariant: ['tabular-nums'] },
-  hotPlayPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(24,212,242,0.12)', borderWidth: 1, borderColor: 'rgba(24,212,242,0.25)',
-    paddingHorizontal: 11, paddingVertical: 4, borderRadius: 12,
-  },
-  hotPlayTxt: { fontSize: 10, fontWeight: '800', color: CYAN, letterSpacing: 0.5 },
 
   searchWrap: {
     marginHorizontal: SPACING.lg, marginTop: SPACING.md + 2, marginBottom: SPACING.md + 2,
@@ -662,7 +505,6 @@ const styles = StyleSheet.create({
   dotActive: { width: 16, backgroundColor: CYAN, opacity: 1 },
 
   grid: { paddingHorizontal: SPACING.lg, paddingTop: 4 },
-  skeletonRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   cardRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   card: {
     width: '47.5%', backgroundColor: SURFACE, borderRadius: 16,
@@ -673,12 +515,6 @@ const styles = StyleSheet.create({
     aspectRatio: 1.5, alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden',
   },
   gameArtImg: { width: '100%', height: '100%' },
-  hotBadge: {
-    position: 'absolute', top: 9, right: 9,
-    backgroundColor: 'rgba(245,158,11,0.16)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.35)',
-    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
-  },
-  hotBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#f59e0b', letterSpacing: 0.4 },
   cardInfo: { padding: SPACING.md - 3 },
   cardName: { fontSize: 14.5, fontWeight: '700', color: TEXT, marginBottom: 3 },
   cardDesc: { fontSize: 11.5, color: TEXT_DIM, lineHeight: 15.5, marginBottom: SPACING.sm + 2, minHeight: 31 },
@@ -688,7 +524,6 @@ const styles = StyleSheet.create({
     width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: CYAN,
     alignItems: 'center', justifyContent: 'center',
   },
-  playsText: { fontSize: 10, color: TEXT_MUTED, fontWeight: '600', marginTop: 6, fontVariant: ['tabular-nums'] },
 
   emptyWrap: { alignItems: 'center', paddingTop: 60, paddingBottom: 40 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: TEXT, marginBottom: 6 },

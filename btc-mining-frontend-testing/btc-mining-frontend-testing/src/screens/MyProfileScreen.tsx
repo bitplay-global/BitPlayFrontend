@@ -45,6 +45,7 @@ const MyProfileScreen = () => {
   const { user, logout } = useAuth();
 
   const [invitationRewards, setInvitationRewards] = useState('0.0000000000000000');
+  const [referralBonusGh, setReferralBonusGh] = useState(0);
   const [referralCode, setReferralCode] = useState('');
   const [referralCount, setReferralCount] = useState(0);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -115,6 +116,7 @@ const MyProfileScreen = () => {
             if (rewardsData.success) {
               const rewardValue = parseFloat(rewardsData.totalRewards || '0');
               setInvitationRewards(rewardValue.toFixed(16));
+              setReferralBonusGh(Number(rewardsData.activeRewardGh) || 0);
             }
           }
         } catch (rewardsError) {
@@ -189,7 +191,12 @@ const MyProfileScreen = () => {
             <View style={styles.rewardsRow}>
               <View style={styles.rewardsLeft}>
                 <Text style={styles.rewardsLabel}>Invitation Rewards</Text>
-                <Text style={styles.rewardsValue}>{invitationRewards} BTC</Text>
+                {/* Referrals pay bonus mining power since 30 Oct 2026
+                    (backend referralRewardService.js); BTC paid before then stays. */}
+                <Text style={styles.rewardsValue}>{referralBonusGh.toFixed(2)} GH/s today</Text>
+                {parseFloat(invitationRewards) > 0 && (
+                  <Text style={styles.rewardsEarlier}>Earned before 30 Oct: {parseFloat(invitationRewards).toFixed(8)} BTC</Text>
+                )}
               </View>
               <View style={styles.referralCountBadge}>
                 <Icon name="account-multiple" size={18} color="#22D3EE" />
@@ -372,6 +379,7 @@ const MyProfileScreen = () => {
         onClose={() => setShowInviteModal(false)}
         referralCode={referralCode || user?.referralCode || ''}
         invitationRewards={parseFloat(invitationRewards)}
+        referralBonusGh={referralBonusGh}
         referralCount={referralCount}
       />
     </ImageBackground>
@@ -471,6 +479,11 @@ const styles = StyleSheet.create({
   },
   rewardsLeft: {
     flex: 1,
+  },
+  rewardsEarlier: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
   },
   rewardsLabel: {
     color: '#333',
