@@ -256,8 +256,6 @@ export default function TapToBombScreen() {
       claimEarnedRef.current = false;
       freeRetry.reset();
       dealNewBoard();
-    } else {
-      Alert.alert('Ad not completed', 'Please watch the full video to redeem your reward.');
     }
   }, [dealNewBoard, freeRetry]);
 
@@ -271,8 +269,6 @@ export default function TapToBombScreen() {
     if (retryEarnedRef.current) {
       retryEarnedRef.current = false;
       dealNewBoard();
-    } else {
-      Alert.alert('Ad not completed', 'Please watch the full video to try again.');
     }
   }, [dealNewBoard]);
 
@@ -291,6 +287,9 @@ export default function TapToBombScreen() {
     }
     showClaimAd();
   };
+
+  // Decline the optional reward video and play on (AdMob "user choice").
+  const skipClaim = () => { pendingWinGh.current = null; dealNewBoard(); };
 
   const openRetryAd = () => {
     if (freeRetry.tryFree()) {
@@ -355,7 +354,7 @@ export default function TapToBombScreen() {
                       <Text style={s.outcomeTitle}>
                         You Won <Text style={s.outcomeTitleAccent}>+{winningTileGh} GH/s</Text>!
                       </Text>
-                      <Text style={s.outcomeBody}>Watch the video to add it to your mining power.</Text>
+                      <Text style={s.outcomeBody}>Optional: watch a short video to add it to your mining power.</Text>
                     </View>
                     <View style={s.rewardArtBadge}>
                       <Icon name="lightning-bolt-circle" size={44} color={CYAN_ACCENT} />
@@ -373,6 +372,9 @@ export default function TapToBombScreen() {
                       )}
                     </View>
                   </TouchableOpacity>
+                  <TouchableOpacity style={s.skipBtn} onPress={skipClaim} disabled={crediting} activeOpacity={0.7}>
+                    <Text style={s.skipTxt}>No thanks, play again</Text>
+                  </TouchableOpacity>
                 </View>
               </LinearGradient>
             </View>
@@ -386,7 +388,7 @@ export default function TapToBombScreen() {
                     <Icon name="bomb" size={30} color={BOMB_ACCENT} />
                   </View>
                   <Text style={s.outcomeTitle}>Boom! Better Luck Next Time!</Text>
-                  <Text style={s.outcomeBody}>{freeRetry.left > 0 ? `Try again for free — ${freeRetry.left} free ${freeRetry.left === 1 ? 'retry' : 'retries'} left before a short video.` : 'Watch a short video to try again.'}</Text>
+                  <Text style={s.outcomeBody}>Try again for free.</Text>
                   <TouchableOpacity style={s.adBtn} onPress={openRetryAd} disabled={freeRetry.left === 0 && retryAdLoading && !retryAdLoaded} activeOpacity={0.88}>
                     <View style={s.adBtnBomb}>
                       {freeRetry.left === 0 && retryAdLoading && !retryAdLoaded ? (
@@ -533,6 +535,8 @@ const s = StyleSheet.create({
   },
   outcomeTitle: { fontSize: 19, fontWeight: '800', color: TEXT_PRIMARY, textAlign: 'left', lineHeight: 25 },
   outcomeTitleAccent: { color: CYAN_ACCENT, fontWeight: '900' },
+  skipBtn: { marginTop: 12, alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 },
+  skipTxt: { color: '#C4B5FD', fontSize: 13.5, fontWeight: '600', textDecorationLine: 'underline' },
   outcomeBody: { marginTop: 6, fontSize: 13.5, color: TEXT_SECONDARY, textAlign: 'left', lineHeight: 19 },
   adBtn: { alignSelf: 'stretch', width: '100%', borderRadius: 16, overflow: 'hidden' },
   adBtnGold: {

@@ -217,8 +217,6 @@ export default function ScratchAndWinScreen() {
       claimEarnedRef.current = false;
       freeRetry.reset();
       dealNewCard();
-    } else {
-      Alert.alert('Ad not completed', 'Please watch the full video to redeem your reward.');
     }
   }, [dealNewCard, freeRetry]);
 
@@ -232,8 +230,6 @@ export default function ScratchAndWinScreen() {
     if (retryEarnedRef.current) {
       retryEarnedRef.current = false;
       dealNewCard();
-    } else {
-      Alert.alert('Ad not completed', 'Please watch the full video to try again.');
     }
   }, [dealNewCard]);
 
@@ -252,6 +248,9 @@ export default function ScratchAndWinScreen() {
     }
     showClaimAd();
   };
+
+  // Decline the optional reward video and play on (AdMob "user choice").
+  const skipClaim = () => { pendingWinGh.current = null; dealNewCard(); };
 
   const openRetryAd = () => {
     if (freeRetry.tryFree()) {
@@ -347,7 +346,7 @@ export default function ScratchAndWinScreen() {
               <LinearGradient colors={['#2D1B4E', '#1A0F2E']} style={s.outcomeGradient}>
                 <View style={s.outcomeInner}>
                   <Text style={s.outcomeTitle}>You Won +{currentOutcome.gh} GH/s!</Text>
-                  <Text style={s.outcomeBody}>Watch the video to add it to your mining power.</Text>
+                  <Text style={s.outcomeBody}>Optional: watch a short video to add it to your mining power.</Text>
                   <TouchableOpacity style={s.adBtn} onPress={openClaimAd} disabled={crediting}>
                     <LinearGradient colors={['#FBBF24', '#D97706']} style={s.adBtnGrad}>
                       <View style={s.adBtnInner}>
@@ -362,6 +361,9 @@ export default function ScratchAndWinScreen() {
                       </View>
                     </LinearGradient>
                   </TouchableOpacity>
+                  <TouchableOpacity style={s.skipBtn} onPress={skipClaim} disabled={crediting} activeOpacity={0.7}>
+                    <Text style={s.skipTxt}>No thanks, play again</Text>
+                  </TouchableOpacity>
                 </View>
               </LinearGradient>
             </View>
@@ -373,7 +375,7 @@ export default function ScratchAndWinScreen() {
                 <View style={s.outcomeInner}>
                   <Icon name="refresh-circle" size={32} color="#F87171" style={{ marginBottom: 6 }} />
                   <Text style={s.outcomeTitle}>Better Luck Next Time!</Text>
-                  <Text style={s.outcomeBody}>{freeRetry.left > 0 ? `Try again for free — ${freeRetry.left} free ${freeRetry.left === 1 ? 'retry' : 'retries'} left before a short video.` : 'Watch a short video to try again.'}</Text>
+                  <Text style={s.outcomeBody}>Try again for free.</Text>
                   <TouchableOpacity style={s.adBtn} onPress={openRetryAd} disabled={freeRetry.left === 0 && retryAdLoading && !retryAdLoaded}>
                     <LinearGradient colors={['#EF4444', '#B91C1C']} style={s.adBtnGrad}>
                       <View style={s.adBtnInner}>
@@ -393,7 +395,7 @@ export default function ScratchAndWinScreen() {
             </View>
           )}
 
-          <Text style={s.footerHint}>1-5 GH/s per win · watch a video to redeem or try again</Text>
+          <Text style={s.footerHint}>1-5 GH/s per win · optional video to redeem · retries are free</Text>
           <GameRulesNote game="Scratch & Win" prizes="1, 2, 3, 4 or 5 GH/s, or no prize" />
         </>
       )}
@@ -449,6 +451,8 @@ const s = StyleSheet.create({
   outcomeGradient: { width: '100%' },
   outcomeInner: { paddingHorizontal: 20, paddingVertical: 20, alignItems: 'center', width: '100%' },
   outcomeTitle: { fontSize: 20, fontWeight: '900', color: '#FFF', textAlign: 'center' },
+  skipBtn: { marginTop: 12, alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 },
+  skipTxt: { color: '#C4B5FD', fontSize: 13.5, fontWeight: '600', textDecorationLine: 'underline' },
   outcomeBody: { marginTop: 8, fontSize: 14, color: '#C4B5FD', textAlign: 'center', marginBottom: 16 },
   adBtn: { alignSelf: 'stretch', width: '100%', borderRadius: 14, overflow: 'hidden' },
   adBtnGrad: { width: '100%' },

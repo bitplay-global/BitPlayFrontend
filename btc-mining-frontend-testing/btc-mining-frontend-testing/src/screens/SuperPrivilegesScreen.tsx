@@ -261,11 +261,8 @@ const SuperPrivilegesScreen: React.FC = () => {
   }, [user?.id, adsWatched, addHashPower, adRewardGh, privilegeAdsKey]);
 
   const onAdClosed = useCallback(() => {
-    if (adEarnedRef.current) {
-      adEarnedRef.current = false;
-    } else {
-      Alert.alert('Ad not completed', 'Please watch the full video to earn your reward.');
-    }
+    // A skipped video simply earns nothing -- no nagging (AdMob "user choice").
+    adEarnedRef.current = false;
   }, []);
 
   const {

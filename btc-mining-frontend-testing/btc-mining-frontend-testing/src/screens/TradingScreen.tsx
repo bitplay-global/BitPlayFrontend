@@ -343,8 +343,6 @@ export default function TradingScreen() {
       if (loseAdCompletedRef.current) {
         loseAdCompletedRef.current = false;
         setLoseModal(null);
-      } else {
-        Alert.alert("Ad not completed", "Please watch the full video to try again.");
       }
     }
   }, []);
@@ -383,11 +381,8 @@ export default function TradingScreen() {
     loadTradingData().finally(() => setHistoryLoading(false));
   }, [loadTradingData]);
 
-  useEffect(() => {
-    if (!rewardLoaded || !pendingRewardAdShowRef.current) return;
-    pendingRewardAdShowRef.current = false;
-    showRewardAd();
-  }, [rewardLoaded, showRewardAd, freeRetry]);
+  // No queued auto-show: an ad may only appear right after the user's own tap
+  // (AdMob rewarded-ads policy, "user choice").
 
   const startTrade = useCallback(
     (direction: Direction) => {
@@ -466,23 +461,19 @@ export default function TradingScreen() {
   }, [activeTrade, displayPrice]);
 
   const handleClaim = useCallback(() => {
-    if (rewardLoaded) {
-      pendingRewardAdShowRef.current = false;
-      showRewardAd();
-      return;
-    }
-    pendingRewardAdShowRef.current = true;
+    pendingRewardAdShowRef.current = false;
     showRewardAd();
+    if (!rewardLoaded) {
+      Alert.alert('Almost ready', 'The video is still loading. Try again in a few seconds.');
+    }
   }, [rewardLoaded, showRewardAd]);
 
   const handleClaimFromHistory = useCallback(
     (itemId: string) => {
       pendingClaimIdRef.current = itemId;
-      if (rewardLoaded) {
-        showRewardAd();
-      } else {
-        pendingRewardAdShowRef.current = true;
-        showRewardAd();
+      showRewardAd();
+      if (!rewardLoaded) {
+        Alert.alert('Almost ready', 'The video is still loading. Try again in a few seconds.');
       }
     },
     [rewardLoaded, showRewardAd]
@@ -495,19 +486,10 @@ export default function TradingScreen() {
   }, []);
 
   const closeLoseModal = useCallback(() => {
-    if (freeRetry.tryFree()) {
-      setLoseModal(null);
-      return;
-    }
-    if (rewardLoaded) {
-      pendingLoseAdWatchRef.current = true;
-      showRewardAd();
-    } else {
-      // If ad not loaded, we can't really force it, but we can show an alert or just wait.
-      // But per "mandatory" request, we'll try to show it if possible.
-      Alert.alert("Ad Loading", "Please wait a moment for the video to load.");
-    }
-  }, [rewardLoaded, showRewardAd]);
+    // Trying again is always free (AdMob rewarded-ads policy, "user choice").
+    freeRetry.tryFree();
+    setLoseModal(null);
+  }, [freeRetry]);
 
   const tradeStats = useMemo(() => {
     const total = rewardHistory.length;
@@ -896,7 +878,7 @@ export default function TradingScreen() {
                 </View>
 
                 <Text style={styles.modalAdHint}>
-                  Watch a clip to claim your reward · resets at 12:00 AM
+                  Optional: watch a short video to claim your reward · resets at 12:00 AM
                 </Text>
 
                 <Pressable
@@ -919,7 +901,7 @@ export default function TradingScreen() {
                         <>
                           <Icon name="play-circle" size={20} color="#1C1407" />
                           <Text style={[styles.ctaTextDark, styles.ctaTextPad]}>
-                            CLAIM {WIN_GH_REWARD} GH/s
+                            WATCH AD → +{WIN_GH_REWARD} GH/s
                           </Text>
                         </>
                       )}
@@ -1021,7 +1003,7 @@ export default function TradingScreen() {
                         color="#0B0F17"
                       />
                       <Text style={[styles.ctaTextDark, styles.ctaTextPad]}>
-                        {freeRetry.left > 0 ? `TRY AGAIN (${freeRetry.left} FREE)` : 'WATCH AD TO TRY AGAIN'}
+                        TRY AGAIN
                       </Text>
                     </View>
                   )}

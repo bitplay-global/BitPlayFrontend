@@ -36,10 +36,12 @@ export function ClaimedBanner({ text }: { text: string }) {
 }
 
 export function WinPanel({
-  title, body, gh, crediting, adLoading, adLoaded, onClaim,
+  title, body, gh, crediting, adLoading, adLoaded, onClaim, onSkip,
 }: {
   title: string; body?: string; gh: number;
   crediting: boolean; adLoading: boolean; adLoaded: boolean; onClaim: () => void;
+  /** Decline the optional video and play on (AdMob "user choice"). */
+  onSkip?: () => void;
 }) {
   return (
     <View style={[s.card, s.cardWin]}>
@@ -47,7 +49,7 @@ export function WinPanel({
         <View style={s.cardInner}>
           <Icon name="cash-multiple" size={34} color="#FBBF24" />
           <Text style={s.title}>{title}</Text>
-          <Text style={s.body}>{body ?? `Watch the video to add +${gh} GH/s to your mining power.`}</Text>
+          <Text style={s.body}>{body ?? `Optional: watch a short video to add +${gh} GH/s to your mining power.`}</Text>
           <TouchableOpacity style={s.btn} onPress={onClaim} disabled={crediting} activeOpacity={0.88}>
             <LinearGradient colors={['#FBBF24', '#D97706']} style={s.btnGrad}>
               <View style={s.btnInner}>
@@ -56,12 +58,17 @@ export function WinPanel({
                 ) : (
                   <>
                     <Icon name="play-circle" size={20} color="#1C1917" />
-                    <Text style={s.btnTxtDark} numberOfLines={1}>Watch Ad &amp; Redeem</Text>
+                    <Text style={s.btnTxtDark} numberOfLines={1}>Watch Ad → +{gh} GH/s</Text>
                   </>
                 )}
               </View>
             </LinearGradient>
           </TouchableOpacity>
+          {onSkip ? (
+            <TouchableOpacity style={s.skipBtn} onPress={onSkip} disabled={crediting} activeOpacity={0.7}>
+              <Text style={s.skipTxt}>No thanks, play again</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </LinearGradient>
     </View>
@@ -75,30 +82,22 @@ export function LosePanel({
   /** Free retries left before a loss needs a video (useGameReward). */
   freeRetriesLeft?: number;
 }) {
-  const free = freeRetriesLeft > 0;
-  const waiting = !free && adLoading && !adLoaded;
+  // Retrying is always free: AdMob's rewarded-ads policy ("user choice") does
+  // not allow a video to be the only way to keep playing. The ad props stay
+  // for callers but no longer gate anything.
+  void freeRetriesLeft; void adLoading; void adLoaded;
   return (
     <View style={[s.card, s.cardLose]}>
       <LinearGradient colors={['#2D1020', '#1A0A18']} style={s.cardGrad}>
         <View style={s.cardInner}>
           <Icon name="emoticon-sad-outline" size={34} color="#F87171" />
           <Text style={s.title}>{title}</Text>
-          <Text style={s.body}>
-            {free
-              ? `Try again for free — ${freeRetriesLeft} free ${freeRetriesLeft === 1 ? 'retry' : 'retries'} left before a short video.`
-              : (body ?? 'Watch a short video to try again.')}
-          </Text>
-          <TouchableOpacity style={s.btn} onPress={onRetry} disabled={waiting} activeOpacity={0.88}>
+          <Text style={s.body}>{body ?? 'Better luck next round!'}</Text>
+          <TouchableOpacity style={s.btn} onPress={onRetry} activeOpacity={0.88}>
             <LinearGradient colors={['#EF4444', '#B91C1C']} style={s.btnGrad}>
               <View style={s.btnInner}>
-                {waiting ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <>
-                    <Icon name={free ? 'refresh' : 'play-circle'} size={20} color="#FFF" />
-                    <Text style={s.btnTxtLight} numberOfLines={1}>{free ? 'Try Again' : 'Watch Ad & Try Again'}</Text>
-                  </>
-                )}
+                <Icon name="refresh" size={20} color="#FFF" />
+                <Text style={s.btnTxtLight} numberOfLines={1}>Try Again</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
@@ -116,6 +115,8 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(74,222,128,0.35)', width: '100%',
   },
   bannerText: { flex: 1, color: '#DCFCE7', fontSize: 13 },
+  skipBtn: { marginTop: 12, paddingVertical: 6, paddingHorizontal: 12 },
+  skipTxt: { color: '#C4B5FD', fontSize: 13.5, fontWeight: '600', textDecorationLine: 'underline' },
 
   card: { width: '100%', borderRadius: 18, overflow: 'hidden', borderWidth: 1, marginTop: 4 },
   cardWin: { borderColor: 'rgba(251,191,36,0.25)' },

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAdConfig } from '../providers/AdConfigProvider';
-import { freeRetriesLeft, takeFreeRetry, resetFreeRetries, noteLoss, noteWin } from '../services/gameRetryCredits';
+import { freeRetriesLeft, resetFreeRetries, noteLoss, noteWin } from '../services/gameRetryCredits';
 
 /**
  * Free retries after a loss, for the games that run their own retry video
@@ -14,13 +14,15 @@ export function useFreeRetries(game: string) {
   const refresh = useCallback(() => setLeft(freeRetriesLeft(game, free)), [game, free]);
   useEffect(() => { refresh(); }, [refresh]);
 
-  /** Uses a free retry if one is left; true means start the new round now, no video. */
+  /**
+   * Retrying is always free (AdMob rewarded-ads policy, "user choice": a video
+   * may never be the only way to keep playing). Records the loss for the
+   * lucky round and always returns true: start the new round now, no video.
+   */
   const tryFree = useCallback(() => {
     noteLoss(game);
-    const used = takeFreeRetry(game, free);
-    refresh();
-    return used;
-  }, [game, free, refresh]);
+    return true;
+  }, [game]);
 
   /** Call after any fully watched video in this game. */
   const reset = useCallback(() => {
@@ -31,5 +33,7 @@ export function useFreeRetries(game: string) {
   /** Call when a round is won (ends the loss run for the lucky round). */
   const won = useCallback(() => noteWin(game), [game]);
 
-  return { left, tryFree, reset, won };
+  // Unlimited: no game ever falls back to a required video.
+  void left;
+  return { left: Number.POSITIVE_INFINITY, tryFree, reset, won };
 }

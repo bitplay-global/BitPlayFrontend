@@ -6,7 +6,7 @@ import { useHashPower } from '../stores/HashPowerStore';
 import { useAdConfig } from '../providers/AdConfigProvider';
 import { useRewardedVideoAd } from '../services/googleAds';
 import { get_data_uri } from '../config/api';
-import { freeRetriesLeft, takeFreeRetry, resetFreeRetries, noteLoss, noteWin } from '../services/gameRetryCredits';
+import { freeRetriesLeft, resetFreeRetries, noteLoss, noteWin } from '../services/gameRetryCredits';
 
 /**
  * The ad-gated reward flow every mini-game shares.
@@ -71,7 +71,6 @@ export function useGameReward({
 
   const pendingWinGh = useRef<number | null>(null);
   const claimEarnedRef = useRef(false);
-  const retryEarnedRef = useRef(false);
 
   /** Arm a win so the claim button can redeem it. */
   const setPendingWin = useCallback((gh: number) => { pendingWinGh.current = gh; noteWin(retryKey); }, [retryKey]);
@@ -113,30 +112,15 @@ export function useGameReward({
       resetFreeRetries(retryKey);
       refreshRetriesLeft();
       onNewRound();
-    } else {
-      Alert.alert('Ad not completed', 'Please watch the full video to redeem your reward.');
     }
+    // Closed early: no reward, no nagging. The panel stays, so the player can
+    // watch again or choose "No thanks" (AdMob rewarded-ads policy).
   }, [onNewRound, retryKey, refreshRetriesLeft]);
 
   const {
     show: showClaimAd, loading: claimAdLoading, loaded: claimAdLoaded,
   } = useRewardedVideoAd(onClaimAdReward, { primaryUnitId: ads.rewardedVideoId }, onClaimAdClosed);
 
-  const onRetryAdReward = useCallback(() => { retryEarnedRef.current = true; }, []);
-  const onRetryAdClosed = useCallback(() => {
-    if (retryEarnedRef.current) {
-      retryEarnedRef.current = false;
-      resetFreeRetries(retryKey);
-      refreshRetriesLeft();
-      onNewRound();
-    } else {
-      Alert.alert('Ad not completed', 'Please watch the full video to try again.');
-    }
-  }, [onNewRound, retryKey, refreshRetriesLeft]);
-
-  const {
-    show: showRetryAd, loading: retryAdLoading, loaded: retryAdLoaded,
-  } = useRewardedVideoAd(onRetryAdReward, { primaryUnitId: ads.rewardedVideoId }, onRetryAdClosed);
 
   // When the ad is not ready, still call show(): it kicks off a fresh request
   // rather than leaving the user with a button that only ever apologises. That
@@ -152,20 +136,21 @@ export function useGameReward({
     showClaimAd();
   }, [claimAdLoaded, showClaimAd]);
 
+  // Trying again after a loss is always free. A video may only be an optional
+  // extra the player chooses (AdMob rewarded-ads policy, "user choice"), never
+  // the only way to keep playing.
   const openRetryAd = useCallback(() => {
     noteLoss(retryKey);
-    if (takeFreeRetry(retryKey, freeRetries)) {
-      refreshRetriesLeft();
-      onNewRound();
-      return;
-    }
-    if (!retryAdLoaded) {
-      showRetryAd();
-      Alert.alert('Almost ready', 'The video is still loading. Try again in a few seconds.');
-      return;
-    }
-    showRetryAd();
-  }, [retryAdLoaded, showRetryAd, retryKey, freeRetries, refreshRetriesLeft, onNewRound]);
+    onNewRound();
+  }, [retryKey, onNewRound]);
+  const retryAdLoading = false;
+  const retryAdLoaded = true;
+
+  /** Decline the optional reward video on a win and deal a new round. */
+  const skipClaim = useCallback(() => {
+    pendingWinGh.current = null;
+    onNewRound();
+  }, [onNewRound]);
 
   return {
     isMiningActive,
@@ -173,7 +158,7 @@ export function useGameReward({
     claimedBanner,
     setPendingWin,
     resetReward,
-    openClaimAd, claimAdLoading, claimAdLoaded,
+    openClaimAd, claimAdLoading, claimAdLoaded, skipClaim,
     openRetryAd, retryAdLoading, retryAdLoaded,
     /** Losses that can still be retried without a video. */
     freeRetriesLeft: retriesLeft,

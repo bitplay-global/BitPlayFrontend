@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useRewardedVideoAd } from '../services/googleAds';
 import { useAdConfig } from '../providers/AdConfigProvider';
@@ -45,22 +45,12 @@ export function useGameAds(onReset: () => void) {
   }, [user, addHashPower, setHashPower]);
 
   const onEarnClosed = useCallback(() => {
-    if (!earnedRef.current) {
-      Alert.alert('Ad not completed', 'Watch the full video to earn 5 GH/s.');
-    }
     earnedRef.current = false;
   }, []);
 
   const { show: showEarnAd, loaded: earnAdLoaded, loading: earnAdLoading } =
     useRewardedVideoAd(onEarnReward, { primaryUnitId: ads.rewardedVideoId }, onEarnClosed);
 
-  // Auto-show earn ad when it finishes loading (if user already tapped)
-  useEffect(() => {
-    if (earnAdLoaded && pendingEarnRef.current) {
-      pendingEarnRef.current = false;
-      showEarnAd();
-    }
-  }, [earnAdLoaded, showEarnAd]);
 
   // --- Retry ad (resets game) ---
   const retryEarnedRef = useRef(false);
@@ -73,36 +63,23 @@ export function useGameAds(onReset: () => void) {
     if (retryEarnedRef.current) {
       retryEarnedRef.current = false;
       onReset();
-    } else {
-      Alert.alert('Ad not completed', 'Watch the full video to play again.');
     }
   }, [onReset]);
 
   const { show: showRetryAd, loaded: retryAdLoaded, loading: retryAdLoading } =
     useRewardedVideoAd(onRetryReward, { primaryUnitId: ads.rewardedVideoId }, onRetryClosed);
 
-  // Auto-show retry ad when it finishes loading (if user already tapped)
-  useEffect(() => {
-    if (retryAdLoaded && pendingRetryRef.current) {
-      pendingRetryRef.current = false;
-      showRetryAd();
-    }
-  }, [retryAdLoaded, showRetryAd]);
 
   const handleShowEarnAd = useCallback(() => {
-    if (!earnAdLoaded) {
-      // Queue — auto-shows when ad finishes loading (no blocking alert)
-      pendingEarnRef.current = true;
-      return;
-    }
+    // Never queue an ad to pop up later: it may only show right after the
+    // user's own tap (AdMob "user choice"). Not ready = request one; the user
+    // taps again when it is.
+    if (!earnAdLoaded) { showEarnAd(); Alert.alert('Almost ready', 'The video is still loading. Try again in a few seconds.'); return; }
     showEarnAd();
   }, [earnAdLoaded, showEarnAd]);
 
   const handleShowRetryAd = useCallback(() => {
-    if (!retryAdLoaded) {
-      pendingRetryRef.current = true;
-      return;
-    }
+    if (!retryAdLoaded) { showRetryAd(); Alert.alert('Almost ready', 'The video is still loading. Try again in a few seconds.'); return; }
     showRetryAd();
   }, [retryAdLoaded, showRetryAd]);
 

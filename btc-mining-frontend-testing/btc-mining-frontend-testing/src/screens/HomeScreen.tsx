@@ -1120,25 +1120,9 @@ const Page: React.FC = () => {
     }
   };
 
-  // The toggle turns on optimistically when the activation ad opens. If the ad
-  // closes or fails without a reward, shouldClaimDailyRewardRef is still set
-  // (handleReward clears it), so mining never started: turn the toggle back
-  // off rather than leaving it saying "Activated" at 0 GH/s.
-  const handleActivationAdClosed = () => {
-    if (!shouldClaimDailyRewardRef.current) return;
-    shouldClaimDailyRewardRef.current = false;
-    miningActivatedLocallyRef.current = false;
-    setIsMiningEnabled(false);
-    Alert.alert('Ad not completed', 'Please watch the full video to start mining.');
-  };
-
-  const { show: showActivationAd, loading: activationLoading, loaded: activationLoaded } = useRewardedVideoAd(handleReward, {
-    primaryUnitId: ads.rewardedVideoId,
-  }, handleActivationAdClosed);
-  // Read when the user answers the Start Mining dialog, which can be well after
-  // the render that opened it.
-  const activationLoadedRef = useRef(activationLoaded);
-  activationLoadedRef.current = activationLoaded;
+  // Starting mining needs no ad (AdMob rewarded-ads policy, "user choice":
+  // declining an ad must not block normal use of the app). Videos stay as
+  // optional speed boosts (Claim / 30 GH/s buttons below).
   const { show: showFiveGhAd, loading: fiveGhLoading, loaded: fiveGhLoaded } = useRewardedVideoAd(handleReward, {
     primaryUnitId: ads.rewardedVideoId,
   });
@@ -1155,12 +1139,6 @@ const Page: React.FC = () => {
     }
   };
 
-  // If user attempted activation while ads were loading, stop showing loader once ads are ready or mining is enabled.
-  useEffect(() => {
-    if (!activationLoading || isMiningEnabled) {
-      setIsMiningActivationPending(false);
-    }
-  }, [activationLoading, isMiningEnabled]);
 
   // -----------------------------
   // Load State
@@ -1904,7 +1882,7 @@ const Page: React.FC = () => {
             <View style={styles.toggleLabelContainer}>
               {isMiningEnabled ? (
                 <Text style={styles.toggleLabel}>Activated</Text>
-              ) : isMiningActivationPending && activationLoading ? (
+              ) : isMiningActivationPending ? (
                 <BitPlayLoader size="sm" />
               ) : (
                 <Text style={styles.toggleLabel}>Activate</Text>
@@ -1972,55 +1950,42 @@ const Page: React.FC = () => {
                     }
                   }
                 }
-                if (activationLoading) {
-                  if (newValue) setIsMiningActivationPending(true);
+                if (newValue) {
+                  if (isMiningActivationPending) return;
                   Alert.alert(
-                    'Please wait for Ads to load',
-                    'The mining activation ad is still loading. Try again in some seconds.',
-                    [{ text: 'OK', onPress: () => { if (!newValue) setIsMiningEnabled(false); } }],
+                    'Start Mining',
+                    'Mining will run until 12 AM, when your daily mining cycle resets. You can watch optional videos later to boost your speed.',
+                    [
+                      { text: 'Cancel', style: 'cancel', onPress: () => setIsMiningEnabled(false) },
+                      {
+                        text: 'Start Mining',
+                        onPress: async () => {
+                          setStartTime(null);
+                          setIsMiningEnabled(true);
+                          miningActivatedLocallyRef.current = true;
+                          setIsMiningActivationPending(true);
+                          try {
+                            await ClaimDailyReward();
+                          } catch (e) {
+                            Alert.alert('Could not start mining', 'Please check your connection and try again.');
+                          } finally {
+                            setIsMiningActivationPending(false);
+                          }
+                        },
+                      },
+                    ],
                     { cancelable: false },
                   );
                 } else {
-                  if (newValue) {
-                    Alert.alert(
-                      'Start Mining',
-                      'Watch an ad to start mining. After activation mining will continue until 12AM, When your daily mining cycle resets.',
-                      [
-                        { text: 'Cancel', style: 'cancel', onPress: () => setIsMiningEnabled(false) },
-                        {
-                          text: 'OK',
-                          onPress: async () => {
-                            if (!activationLoadedRef.current) {
-                              // No ad to show (still loading, or none available):
-                              // show() only requests one, and nothing would ever
-                              // start mining. Say so and leave the toggle off.
-                              setIsMiningEnabled(false);
-                              showActivationAd();
-                              Alert.alert('Almost ready', 'The video is still loading. Please try again in a few seconds.');
-                              return;
-                            }
-                            setStartTime(null);
-                            setIsMiningEnabled(true);
-                            miningActivatedLocallyRef.current = true;
-                            setIsMiningActivationPending(false);
-                            shouldClaimDailyRewardRef.current = true;
-                            showActivationAd();
-                          },
-                        },
-                      ],
-                      { cancelable: false },
-                    );
-                  } else {
-                    if (isDailyRewardClaimed) {
-                      Alert.alert('Mining in Cooling Time', 'Please wait for the cooling time to finish.', [{ text: 'OK' }], { cancelable: false });
-                      return;
-                    }
-                    setIsMiningEnabled(false);
-                    miningActivatedLocallyRef.current = false;
-                    setStartTime(null);
-                    syncUserData(0, undefined, false);
-                    Alert.alert('Mining Disabled', 'Mining has been turned off.');
+                  if (isDailyRewardClaimed) {
+                    Alert.alert('Mining in Cooling Time', 'Please wait for the cooling time to finish.', [{ text: 'OK' }], { cancelable: false });
+                    return;
                   }
+                  setIsMiningEnabled(false);
+                  miningActivatedLocallyRef.current = false;
+                  setStartTime(null);
+                  syncUserData(0, undefined, false);
+                  Alert.alert('Mining Disabled', 'Mining has been turned off.');
                 }
               }}
             >
