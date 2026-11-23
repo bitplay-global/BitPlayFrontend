@@ -142,6 +142,7 @@ export default function SpeedTapScreen() {
               adLoading={reward.claimAdLoading}
               adLoaded={reward.claimAdLoaded}
               onClaim={reward.openClaimAd}
+              onSkip={reward.skipClaim}
             />
           )}
 

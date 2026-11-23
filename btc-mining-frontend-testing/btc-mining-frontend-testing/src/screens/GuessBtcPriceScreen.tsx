@@ -166,6 +166,7 @@ export default function GuessBtcPriceScreen() {
               adLoading={reward.claimAdLoading}
               adLoaded={reward.claimAdLoaded}
               onClaim={reward.openClaimAd}
+              onSkip={reward.skipClaim}
             />
           )}
 

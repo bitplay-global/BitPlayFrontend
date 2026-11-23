@@ -142,6 +142,7 @@ export default function HigherLowerScreen() {
               adLoading={reward.claimAdLoading}
               adLoaded={reward.claimAdLoaded}
               onClaim={reward.openClaimAd}
+              onSkip={reward.skipClaim}
             />
           )}
 

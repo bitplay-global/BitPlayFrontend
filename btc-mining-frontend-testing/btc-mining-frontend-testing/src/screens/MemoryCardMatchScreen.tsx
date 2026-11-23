@@ -78,7 +78,6 @@ export default function MemoryCardMatchScreen() {
   const memRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
-  const playAgainEarned = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -180,21 +179,14 @@ export default function MemoryCardMatchScreen() {
     setClaimed(true); setClaiming(false);
   };
 
-  // A lost round (time up) replays for free a few times before one needs a
-  // video (services/gameRetryCredits.ts); replaying after a win still costs one.
+  // Replaying is always free, after a win or a loss (AdMob rewarded-ads
+  // policy, "user choice"); the only video is the optional reward claim.
   const freeRetry = useFreeRetries('Memory Match');
 
   const onRewardEarned = useCallback(() => { freeRetry.reset(); void claimReward(); }, [won, claimed, freeRetry]);
   const { show: showClaim, loaded: claimLoaded } = useRewardedVideoAd(onRewardEarned, { primaryUnitId: ads.rewardedVideoId });
 
-  const onPlayAgainEarned = useCallback(() => { playAgainEarned.current = true; freeRetry.reset(); }, [freeRetry]);
-  const onPlayAgainClosed = useCallback(() => {
-    if (playAgainEarned.current) { playAgainEarned.current = false; setRound(r => r + 1); startRound(); }
-    else Alert.alert('Ad Incomplete', 'Watch the full ad to play again.');
-  }, [startRound]);
-  const { show: showPlayAgain, loaded: playAgainLoaded } = useRewardedVideoAd(onPlayAgainEarned, { primaryUnitId: ads.rewardedVideoId }, onPlayAgainClosed);
-
-  const replayFree = !won && freeRetry.left > 0;
+  const replayFree = true;
 
   return (
     <GameScreenWrapper title="Memory Match" iconName="cards" iconColor="#818cf8" scrollable>
@@ -255,25 +247,13 @@ export default function MemoryCardMatchScreen() {
             compact={layout.compact}
             claimLabel={`▶ Watch Ad → Earn +${WIN_REWARD_GH} GH/s`}
             claimedLabel={`+${WIN_REWARD_GH} GH/s Added!`}
-            onClaim={() => claimLoaded ? showClaim() : Alert.alert('Loading', 'Ad loading, try again.')}
-            // Replaying after a WIN always costs a video; after a LOSS it is
-            // free while free retries are left (useFreeRetries).
-            // There is deliberately no other free path: previously a "Play
-            // Free" button existed, and the Watch-Ad button silently fell back
-            // to restarting for free whenever the ad had not loaded yet --
-            // either one let a player keep playing indefinitely without ever
-            // seeing an ad. An unloaded ad now says so instead of granting a
-            // free round.
+            onClaim={() => { if (claimLoaded) showClaim(); else { showClaim(); Alert.alert('Almost ready', 'The video is still loading. Try again in a few seconds.'); } }}
+            // Play Again is always free; the reward video above is optional.
             replayFree={replayFree}
-            replayLabel={replayFree ? `↻ Play Again (${freeRetry.left} free)` : '▶ Watch Ad → Play Again'}
+            replayLabel={won ? '↻ No thanks, play again' : '↻ Play Again'}
             onReplay={() => {
-              if (!won && freeRetry.tryFree()) { setRound(r => r + 1); startRound(); return; }
-              // showPlayAgain() either shows the ad or, when it is not ready,
-              // starts a fresh request -- so this never becomes a dead button.
-              showPlayAgain();
-              if (!playAgainLoaded) {
-                Alert.alert('Almost ready', 'The video is still loading. Try again in a few seconds.');
-              }
+              if (!won) freeRetry.tryFree();
+              setRound(r => r + 1); startRound();
             }}
           />
         )}

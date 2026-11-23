@@ -352,8 +352,6 @@ const SpinAndWinScreen: React.FC = () => {
       setRewardPill('Spin to win');
       setRewardAmountLine('—');
       setBanner(isLuckyRound('Spin & Win') ? 'Video complete — lucky spin, better odds!' : 'Video complete — spin again!');
-    } else {
-      Alert.alert('Ad not completed', 'Please watch the full video to spin again.');
     }
   }, []);
 
@@ -531,6 +529,9 @@ const SpinAndWinScreen: React.FC = () => {
     }
     showClaimAd();
   };
+
+  // Decline the optional reward video and spin on (AdMob "user choice").
+  const skipClaim = () => { pendingWinGh.current = null; onClaimAdClosed(); };
 
   const openRetryAd = () => {
     if (freeRetry.tryFree()) {
@@ -744,7 +745,7 @@ const SpinAndWinScreen: React.FC = () => {
                       <Text style={styles.winAmount}>+{wonGh}</Text>
                       <Text style={styles.winUnit}>GH/s</Text>
                     </Animated.View>
-                    <Text style={styles.outcomeBody}>Watch the video to add it to your mining power.</Text>
+                    <Text style={styles.outcomeBody}>Optional: watch a short video to add it to your mining power.</Text>
                     <TouchableOpacity style={styles.adBtn} onPress={openClaimAd} disabled={claimAdLoading && !claimAdLoaded}>
                       <LinearGradient colors={['#FDE68A', '#FBBF24', '#D97706']} style={styles.adBtnGrad}>
                         <View style={styles.adBtnInner}>
@@ -758,6 +759,9 @@ const SpinAndWinScreen: React.FC = () => {
                           )}
                         </View>
                       </LinearGradient>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.skipBtn} onPress={skipClaim} activeOpacity={0.7}>
+                      <Text style={styles.skipTxt}>No thanks, play again</Text>
                     </TouchableOpacity>
                   </View>
                 </LinearGradient>
@@ -773,7 +777,7 @@ const SpinAndWinScreen: React.FC = () => {
                     </View>
                     <Text style={styles.loseEyebrow}>SO CLOSE!</Text>
                     <Text style={styles.outcomeTitle}>Try Again!</Text>
-                    <Text style={styles.outcomeBody}>{freeRetry.left > 0 ? `Try again for free — ${freeRetry.left} free ${freeRetry.left === 1 ? 'retry' : 'retries'} left before a short video.` : 'Watch a short video to spin again.'}</Text>
+                    <Text style={styles.outcomeBody}>Try again for free.</Text>
                     <TouchableOpacity style={styles.adBtn} onPress={openRetryAd} disabled={freeRetry.left === 0 && retryAdLoading && !retryAdLoaded}>
                       <LinearGradient
                         colors={freeRetry.left > 0 ? ['#8B5CF6', '#6D28D9'] : ['#EF4444', '#B91C1C']}
@@ -1251,6 +1255,8 @@ const styles = StyleSheet.create({
     color: '#FFF',
     textAlign: 'center',
   },
+  skipBtn: { marginTop: 12, alignSelf: 'center', paddingVertical: 6, paddingHorizontal: 12 },
+  skipTxt: { color: '#C4B5FD', fontSize: 13.5, fontWeight: '600', textDecorationLine: 'underline' },
   outcomeBody: {
     marginTop: 8,
     fontSize: 14,

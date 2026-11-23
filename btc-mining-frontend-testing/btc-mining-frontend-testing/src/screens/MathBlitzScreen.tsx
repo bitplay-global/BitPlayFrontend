@@ -183,6 +183,7 @@ export default function MathBlitzScreen() {
               adLoading={reward.claimAdLoading}
               adLoaded={reward.claimAdLoaded}
               onClaim={reward.openClaimAd}
+              onSkip={reward.skipClaim}
             />
           )}
 

@@ -131,6 +131,7 @@ export default function ReactionTapScreen() {
               adLoading={reward.claimAdLoading}
               adLoaded={reward.claimAdLoaded}
               onClaim={reward.openClaimAd}
+              onSkip={reward.skipClaim}
             />
           )}
 
