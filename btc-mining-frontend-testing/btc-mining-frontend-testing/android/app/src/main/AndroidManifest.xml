@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="com.android.vending.BILLING" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+    <!-- netinfo and apptrove ask for ACCESS_WIFI_STATE, which makes Wi-Fi a
+         required feature by default and hides the app from devices without
+         Wi-Fi (Play: "Required hardware feature declarations"). The app works
+         on any network, so Wi-Fi is optional. -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
 
     <application
         android:name=".MainApplication"
