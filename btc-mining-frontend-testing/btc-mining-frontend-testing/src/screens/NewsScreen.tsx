@@ -185,7 +185,7 @@ export default function NewsScreen() {
             {unlockAdLoading && !unlockAdLoaded ? (
               <ActivityIndicator color="#04121A" />
             ) : (
-              <Text style={s.gateBtnText}>▶  Watch &amp; Continue</Text>
+              <Text style={s.gateBtnText}>▶  Watch Ad → More stories</Text>
             )}
           </TouchableOpacity>
         </View>

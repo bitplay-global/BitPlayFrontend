@@ -474,7 +474,7 @@ const SuperPrivilegesScreen: React.FC = () => {
                               style={[styles.claimButtonText, styles.watchAdsButtonLabel]}
                               numberOfLines={1}
                             >
-                              {adsRemaining === 0 ? 'Daily Limit Reached' : 'Watch Ads'}
+                              {adsRemaining === 0 ? 'Daily Limit Reached' : `Watch Ad → +${adRewardGh} Gh/s`}
                             </Text>
                           </>
                         )}
