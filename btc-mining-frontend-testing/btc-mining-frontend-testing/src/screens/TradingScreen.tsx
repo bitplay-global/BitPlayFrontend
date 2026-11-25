@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { confirmRewardedAd } from '../utils/confirmRewardedAd';
 import { BANNER_ADS_ENABLED } from '../config/adPlacements';
 import {
   Alert,
@@ -470,11 +471,16 @@ export default function TradingScreen() {
 
   const handleClaimFromHistory = useCallback(
     (itemId: string) => {
-      pendingClaimIdRef.current = itemId;
-      showRewardAd();
       if (!rewardLoaded) {
+        showRewardAd(); // only requests one; nothing plays
         Alert.alert('Almost ready', 'The video is still loading. Try again in a few seconds.');
+        return;
       }
+      // The history row's button is small; ask so the opt-in is unambiguous.
+      confirmRewardedAd(`+${WIN_GH_REWARD} GH/s`, () => {
+        pendingClaimIdRef.current = itemId;
+        showRewardAd();
+      });
     },
     [rewardLoaded, showRewardAd]
   );

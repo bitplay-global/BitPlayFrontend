@@ -272,7 +272,7 @@ export function TradeHistoryRow({
           ) : (
             <TouchableOpacity style={styles.hClaimBtn} onPress={onClaim} activeOpacity={0.8}>
               <Icon name="play-circle" size={12} color="#1C1407" />
-              <Text style={styles.hClaimText}>Claim {reward}</Text>
+              <Text style={styles.hClaimText}>Ad → +{reward}</Text>
             </TouchableOpacity>
           )
         ) : (
