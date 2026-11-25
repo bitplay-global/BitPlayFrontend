@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { confirmRewardedAd } from '../utils/confirmRewardedAd';
 import { BANNER_ADS_ENABLED } from '../config/adPlacements';
 import BitPlayLoader from '../components/BitPlayLoader';
 import { useFocusEffect } from '@react-navigation/native';
@@ -1132,11 +1133,14 @@ const Page: React.FC = () => {
 
   // show() on an ad that isn't ready only requests a new one, so without this
   // the Claim button looked like it did nothing.
+  // Asks first: the user must clearly opt in to the video (AdMob policy).
   const openVideoClaimAd = () => {
-    showFiveGhAd();
     if (!fiveGhLoaded) {
+      showFiveGhAd(); // only requests one; nothing plays
       Alert.alert('Almost ready', 'The video is still loading. Please try again in a few seconds.');
+      return;
     }
+    confirmRewardedAd('+5.5 GH/s mining speed', () => showFiveGhAd());
   };
 
 
@@ -1602,8 +1606,8 @@ const Page: React.FC = () => {
   const buttonLabel = fiveGhLoading
     ? "Loading..."
     : adsWatched === 0
-      ? "Claim Now"
-      : `Claimed (${adsWatched})`;
+      ? "Watch Ad → +5.5"
+      : `Watch Ad (${adsWatched} done)`;
 
   const threeGhButtonLabel = threeGhLoading
     ? "Loading..."
@@ -2168,26 +2172,8 @@ const Page: React.FC = () => {
             />
           </TouchableOpacity>
 
-          {/* Box 2 - Video Claim */}
-          <TouchableOpacity style={styles.claimBox} onPress={async () => {
-            if (adsWatched >= MAX_VIDEO_CLAIMS_PER_TRACK_PER_DAY) {
-              return;
-            }
-            if (!isMiningEnabled) {
-              Alert.alert(
-                'Mining Not Activated',
-                'Please activate mining before claiming rewards.',
-                [{ text: 'OK' }]
-              );
-              return;
-            }
-            const netState = await NetInfo.fetch();
-            if (!netState.isConnected) {
-              Alert.alert('No Connection', 'Please check your internet connection and try again.');
-              return;
-            }
-            openVideoClaimAd();
-          }}>
+          {/* Box 2 - Video Claim. Only the labelled button below plays a video. */}
+          <View style={styles.claimBox}>
             {/* Top Row */}
             <View style={styles.claimTopRow}>
               <View style={styles.iconCorner}>
@@ -2206,7 +2192,7 @@ const Page: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* +100% Claim Tag */}
+            {/* Optional video Tag */}
             <View style={styles.bonusTag}>
               <Text style={styles.bonusTagText}>+100% Claim</Text>
             </View>
@@ -2238,7 +2224,7 @@ const Page: React.FC = () => {
               text={buttonLabel}
               enabled={!fiveGhLoading && adsWatched < MAX_VIDEO_CLAIMS_PER_TRACK_PER_DAY}
             />
-          </TouchableOpacity>
+          </View>
         </View>
 
 
