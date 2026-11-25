@@ -754,7 +754,7 @@ const SpinAndWinScreen: React.FC = () => {
                           ) : (
                             <>
                               <Icon name="play-circle" size={22} color="#1C1917" />
-                              <Text style={styles.adBtnTextDark}>Watch & claim</Text>
+                              <Text style={styles.adBtnTextDark}>Watch Ad → Claim</Text>
                             </>
                           )}
                         </View>
