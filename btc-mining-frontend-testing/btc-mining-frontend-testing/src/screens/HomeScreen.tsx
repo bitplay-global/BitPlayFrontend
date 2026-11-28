@@ -70,7 +70,8 @@ import { getObjectFromStorage, saveObjectToStorage } from '../config/storage';
 import { GAMES } from './GameZoneScreen';
 
 const HOME_POPULAR_GAMES_KEY = 'homePopularGames:v1';
-const HOME_DEFAULT_GAMES = ['BTC Trading', 'Spin & Win', 'Memory Match'];
+// Fallbacks in order; names missing from GAMES (hidden on iOS) are skipped.
+const HOME_DEFAULT_GAMES = ['BTC Trading', 'Spin & Win', 'Memory Match', 'Odd One Out', 'Crypto Quiz'];
 import { getHomeCacheKey, isValidHomeCache, HomeCacheShape, HOME_CACHE_VERSION } from '../config/homeCache';
 // Shared with SuperPrivilegesScreen's "Watch Ads" button, which feeds this same
 // daily `rewarded_ads_watched` counter -- both must enforce the same cap.
@@ -1823,8 +1824,8 @@ const Page: React.FC = () => {
 
               <Text style={styles.detailSubtitle}>
                 {previousDayEarnings > 0
-                  ? 'Previous Day Earnings'
-                  : 'Saved Balance'}
+                  ? "Yesterday's earnings"
+                  : 'Saved balance'}
               </Text>
             </View>
           </TouchableOpacity>
@@ -2021,7 +2022,11 @@ const Page: React.FC = () => {
 
 
         {/* NEW: Loss Tracking Section (shown when user has purchased mining power AND has loss data from API) */}
-        {hashPower > 3 && hasLossData && (cumulativeLoss) > 0 && dailyAdsWatched < dailyAdsRequired && (
+        {/* Loss-offset card retired: purchased mining power no longer shrinks
+            when ads are skipped (paid value must not depend on watching ads --
+            App Store 3.1.2(a) / Play subscriptions policy; backend
+            UserMiningDetails.getEffectiveHashpower). */}
+        {false && hashPower > 3 && hasLossData && (cumulativeLoss) > 0 && dailyAdsWatched < dailyAdsRequired && (
           <View style={styles.lossTrackingSection}>
             {/* Loss Percentages Row */}
             <View style={styles.lossPercentagesRow}>
@@ -2106,7 +2111,7 @@ const Page: React.FC = () => {
               style={styles.bestOfferButton}
               onPress={() => setShowNewcomerModal(true)}
             >
-              <Text style={styles.bestOfferButtonText}>Claim</Text>
+              <Text style={styles.bestOfferButtonText}>View offer</Text>
             </TouchableOpacity>
           </View>
 
@@ -2138,9 +2143,9 @@ const Page: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            {/* +100% Claim Tag */}
+            {/* Daily free claim tag */}
             <View style={styles.bonusTag}>
-              <Text style={styles.bonusTagText}>+100% Claim</Text>
+              <Text style={styles.bonusTagText}>Free daily</Text>
             </View>
 
             {/* Power Row */}
@@ -2194,7 +2199,7 @@ const Page: React.FC = () => {
 
             {/* Optional video Tag */}
             <View style={styles.bonusTag}>
-              <Text style={styles.bonusTagText}>+100% Claim</Text>
+              <Text style={styles.bonusTagText}>Optional video</Text>
             </View>
 
             {/* Power Row */}
@@ -2306,6 +2311,10 @@ const Page: React.FC = () => {
           </Pressable>
         </View>
 
+        {/* Super Privileges: a paid product whose value is multiplied ad
+            rewards. Hidden on iOS (App Store 3.1.2(a): paid value must not
+            depend on watching ads; 3.1.5(v)). */}
+        {Platform.OS !== 'ios' && (
         <View style={styles.dailyRewardSection}>
           <View style={styles.dailyRewardContainer}>
             {/* Left Icon */}
@@ -2317,20 +2326,19 @@ const Page: React.FC = () => {
             {/* Center Texts */}
             <View style={styles.rewardTextContainer}>
               {privilegeMultiplier === 1 && (
-                // Marketing bait shown only to non-VIP users -- these two lines
-                // are deliberately not tied to BASE_HASHPOWER_PER_AD/real reward
-                // math, they're an upsell hook for Super Privileges. Users who
-                // already own a real multiplier see their true value below
-                // instead (superPrivilegesVipLabel / the computed Gh/s branch).
+                // Upsell for non-VIP users. Shows the real best case (both
+                // plans stacked: 1 + 50 + 100 = 151x the per-video reward);
+                // the old fixed "1.5 TH/s" overstated it (store policies on
+                // misleading claims).
                 <View style={{ ...styles.bonusTag, marginLeft: 0 }}>
-                  <Text style={{ ...styles.bonusTagText }}>VIP +15000%</Text>
+                  <Text style={{ ...styles.bonusTagText }}>VIP up to +15000%</Text>
                 </View>
               )}
               <View style={styles.powerRow}>
                 {privilegeMultiplier === 1 ? (
                   <>
-                    <Text style={styles.powerValue}>1.5</Text>
-                    <Text style={styles.powerUnit}> TH/s</Text>
+                    <Text style={styles.powerValue}>{Math.floor(BASE_HASHPOWER_PER_AD * 151)}</Text>
+                    <Text style={styles.powerUnit}> Gh/s per video</Text>
                   </>
                 ) : (
                   <>
@@ -2363,12 +2371,13 @@ const Page: React.FC = () => {
                 styleProps={styles.dailyRewardGradientButton}
                 gradientStyleProps={{ marginTop: 0 }}
                 onPress={() => navigation.navigate('SuperPrivileges' as any)}
-                text="Claim Now"
+                text="Get VIP"
                 enabled
               />
             </View>
           </View>
         </View>
+        )}
 
         {/* Streak Bonus Banner */}
         {(() => {
@@ -2400,7 +2409,7 @@ const Page: React.FC = () => {
                 <View style={styles.streakFireRow}>
                   <Icon name="fire" size={22} color="#F59E0B" />
                   <Text style={styles.streakBannerDays}>{streakDays}</Text>
-                  <Text style={styles.streakBannerDaysLabel}> day streak</Text>
+                  <Text style={styles.streakBannerDaysLabel}> day mining streak</Text>
                 </View>
                 {streakBonusGh > 0 && (
                   <Text style={styles.streakBannerBonus}>+{streakBonusGh} Gh/s bonus active</Text>
@@ -2681,7 +2690,7 @@ const Page: React.FC = () => {
                       {offerMiningPlan
                         ? offerMiningPlan.revenueCatPackage
                           ? `Subscribe ${offerMiningPlan.revenueCatPackage.product.priceString}`
-                          : `Mint $${offerMiningPlan.plan_cost.toFixed(2)}`
+                          : `Subscribe $${offerMiningPlan.plan_cost.toFixed(2)}/month`
                         : 'Loading...'}
                     </Text>
                   )}

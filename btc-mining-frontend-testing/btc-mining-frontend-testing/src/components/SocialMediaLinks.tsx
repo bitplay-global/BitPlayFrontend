@@ -64,7 +64,7 @@ const SocialMediaLinks: React.FC = () => {
             activeOpacity={0.7}
           >
             <View style={styles.socialIconCircle}>
-              <Icon name="twitter" size={24} color="#1DA1F2" />
+              <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '900' }}>X</Text>
             </View>
           </TouchableOpacity>
 

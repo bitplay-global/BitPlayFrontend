@@ -82,19 +82,17 @@ class LocalNotificationService {
             return;
         }
 
-        // Android 12+: exact alarm permission must be enabled for TIMESTAMP triggers.
+        // Android 12+: an exact alarm needs "Alarms & reminders". The app used
+        // to throw users into that settings screen unannounced (on first
+        // launch, before sign-in). A noon reminder does not need to be exact:
+        // without the permission it is scheduled inexactly instead.
+        let exactAllowed = false;
         if (Platform.OS === 'android') {
             try {
                 const settings = await notifee.getNotificationSettings();
-                if (settings.android?.alarm !== AndroidNotificationSetting.ENABLED) {
-                    console.log('[Notifee] Exact alarm permission is disabled. Opening alarm permission settings.');
-                    // This opens: Alarms & reminders settings screen for your app.
-                    await notifee.openAlarmPermissionSettings();
-                    return;
-                }
+                exactAllowed = settings.android?.alarm === AndroidNotificationSetting.ENABLED;
             } catch (e) {
-                console.warn('[Notifee] Failed to check/open alarm permission settings:', e);
-                // Continue anyway; worst-case scheduling may fail on some devices.
+                exactAllowed = false;
             }
         }
 
@@ -118,7 +116,7 @@ class LocalNotificationService {
             timestamp: nextNoon.getTime(),
             // Use AlarmManager so it can still fire when app is killed.
             // `allowWhileIdle` improves reliability under Doze / idle modes.
-            alarmManager: Platform.OS === 'android' ? { allowWhileIdle: true } : undefined,
+            alarmManager: exactAllowed ? { allowWhileIdle: true } : undefined,
         };
 
         // Create a trigger notification

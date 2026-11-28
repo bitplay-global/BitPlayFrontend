@@ -97,7 +97,7 @@ export default function GameEngagementCard() {
           </LinearGradient>
           <View style={s.streakText}>
             <Text style={s.streakTitle} numberOfLines={1}>
-              {active ? `${streak.streakDays}-day streak` : 'Daily streak'}
+              {active ? `${streak.streakDays}-day game streak` : 'Daily game streak'}
             </Text>
             <Text style={s.streakHint} numberOfLines={1}>{hint}</Text>
           </View>

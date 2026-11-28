@@ -173,7 +173,7 @@ const MyProfileScreen = () => {
         <View style={styles.idSection}>
           <View style={styles.idContent}>
             <View style={styles.idRow}>
-              <Text style={styles.idText}>ID:{user?.id?.slice(-7) ?? ''}</Text>
+              <Text style={styles.idText}>ID: {user?.id?.slice(-7) ?? ''}</Text>
               <Text style={styles.timezoneValue} numberOfLines={2}>
                 {displayTimezone}
               </Text>

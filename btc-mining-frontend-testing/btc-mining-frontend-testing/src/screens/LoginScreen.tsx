@@ -14,6 +14,9 @@ import {
   ImageBackground,
   StatusBar,
 } from 'react-native';
+import { Linking as LegalLinking } from 'react-native';
+const TERMS_URL = 'https://bitplaypro.com/terms-and-conditions/';
+const PRIVACY_URL = 'https://bitplaypro.com/privacy-policy/';
 import { useNavigation } from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
 import { apiRequest, API_ENDPOINTS } from '../config/api';
@@ -229,7 +232,7 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
                   <View style={styles.inputContainer}>
                     <View style={styles.inputWrapper}>
                       <Image
-                        source={require('../assets/images/icon_input_box_user.png')}
+                        source={require('../assets/images/icon_input_box_email.png')}
                         style={styles.inputIconImage}
                         resizeMode="contain"
                       />
@@ -440,7 +443,11 @@ const LoginScreen: React.FC<LoginScreenProps> = () => {
 
             {/* Footer */}
             <View style={styles.footer}>
-              <Text style={styles.footerText}>BitPlayPro</Text>
+              <Text style={styles.footerText}>
+                <Text style={{ textDecorationLine: 'underline' }} onPress={() => LegalLinking.openURL(TERMS_URL)}>Terms of Use</Text>
+                {'  ·  '}
+                <Text style={{ textDecorationLine: 'underline' }} onPress={() => LegalLinking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
+              </Text>
             </View>
           </View>
           </ScrollView>
@@ -490,6 +497,7 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
+    marginTop: 24,
     marginBottom: '5%'
   },
 

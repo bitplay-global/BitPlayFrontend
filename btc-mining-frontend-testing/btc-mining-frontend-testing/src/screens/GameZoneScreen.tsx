@@ -4,6 +4,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   TextInput, Animated, Dimensions, Image, NativeSyntheticEvent, NativeScrollEvent,
   LayoutChangeEvent,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -63,7 +64,7 @@ export interface GameEntry {
 }
 
 /** Every game, with its route, icon and real reward label. Home's Play & Earn uses it too. */
-export const GAMES: GameEntry[] = [
+const ALL_GAMES: GameEntry[] = [
   { name: 'BTC Trading', icon: 'bitcoin', iconImage: require('../assets/images/icon_btc_trading.png'), color: '#f59e0b', route: 'TradingScreen', category: 'Featured', desc: 'Trade BTC and earn rewards', rewardLabel: `+${TRADING_WIN_GH} GH/s` },
   { name: 'Spin & Win', icon: 'rotate-3d-variant', iconImage: require('../assets/images/game_spin.png'), color: '#22d3ee', route: 'SpinAndWin', category: 'Featured', desc: 'Spin the wheel, win rewards', rewardLabel: `Up to ${SPIN_MAX_GH} GH/s` },
   { name: 'Memory Match', icon: 'cards', iconImage: require('../assets/images/icon_memory_match.png'), color: '#7c3aed', route: 'MemoryCardMatch', category: 'Featured', desc: 'Match all the pairs', rewardLabel: `+${MEMORY_WIN_GH} GH/s` },
@@ -89,6 +90,21 @@ export const GAMES: GameEntry[] = [
   { name: 'Color Clash', icon: 'palette-swatch-outline', iconImage: require('../assets/images/icon_color_clash.png'), color: '#a78bfa', route: 'ColorClash', category: 'Featured', desc: 'Match the word to its colour', rewardLabel: `Up to ${CLASH_MAX_GH} GH/s` },
   { name: 'Swipe Sort', icon: 'gesture-swipe-horizontal', iconImage: require('../assets/images/icon_swipe_sort.png'), color: '#f59e0b', route: 'SwipeSort', category: 'Featured', desc: 'Real coin or fake coin?', rewardLabel: `Up to ${SWIPE_MAX_GH} GH/s` },
 ];
+
+/**
+ * Games of pure chance that pay GH/s (which converts to withdrawable BTC).
+ * Hidden on iOS: App Store 5.3 treats chance + a prize with real value as
+ * gambling/lottery that needs licensing, and 3.1.5(v) bars crypto rewards
+ * for tasks. Android keeps them.
+ */
+export const IOS_HIDDEN_GAMES = new Set([
+  'Spin & Win', 'Scratch & Win', 'Lucky Dice', 'Treasure Chests', 'Slot Machine',
+  'Crash Cash-Out', 'Tap to Bomb', 'Higher or Lower', 'Rock Paper Scissors',
+]);
+
+export const GAMES: GameEntry[] = Platform.OS === 'ios'
+  ? ALL_GAMES.filter(g => !IOS_HIDDEN_GAMES.has(g.name))
+  : ALL_GAMES;
 
 const CATEGORIES = [
   { key: 'Featured' },

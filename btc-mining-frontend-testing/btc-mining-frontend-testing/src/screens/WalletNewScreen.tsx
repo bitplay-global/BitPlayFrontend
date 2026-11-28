@@ -329,7 +329,7 @@ const WalletNewScreen = () => {
                 <Icon name="arrow-forward-ios" size={14} color="#bcbcbc" />
                 {item.name === 'Lightning' && (
                   <View style={styles.recommendTag}>
-                    <Text style={styles.recommendText}>Recommend</Text>
+                    <Text style={styles.recommendText}>Recommended</Text>
                   </View>
                 )}
               </TouchableOpacity>
