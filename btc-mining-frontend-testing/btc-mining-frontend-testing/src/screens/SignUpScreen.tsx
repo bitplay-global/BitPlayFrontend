@@ -408,7 +408,8 @@ const SignUpScreen: React.FC<SignUpScreenProps> = () => {
                 </>
               )}
 
-              <View style={styles.footer}>
+              {/* In normal flow (the absolute footer sat below the visible area). */}
+              <View style={{ alignItems: 'center', marginTop: 18, marginBottom: 12 }}>
                 <Text style={[styles.footerText, { textAlign: 'center', paddingHorizontal: 24 }]}>
                   By signing up you agree to our{' '}
                   <Text style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Use</Text>

@@ -806,7 +806,7 @@ const StoreScreen = () => {
             <View style={styles.detailRow}>
               <View style={styles.detailLeft}>
                 <View style={styles.bulletPoint} />
-                <Text style={styles.detailLabel}>Gain</Text>
+                <Text style={styles.detailLabel}>Total after purchase</Text>
               </View>
               <Text style={[styles.detailValue, styles.gainValue]}>
                 {gainText}

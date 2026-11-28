@@ -271,7 +271,13 @@ export const setAuthExpiredHandler = (fn: (() => void) | null) => {
 
 const AUTH_EXPIRED_MESSAGE = 'Your session has expired. Please log in again.';
 
-const isAuthExpiredResponse = (status: number, message: string | undefined): boolean => {
+// Sign-in endpoints answer 401 for a wrong email/password. That is not an
+// expired session: the user must see the real reason, not be told their
+// session expired before they ever had one.
+const SIGN_IN_PATH = /\/auth\/(login|register|signup|social-login|google|apple|forgot|reset|verify|2fa|two-factor|mfa)/i;
+
+const isAuthExpiredResponse = (status: number, message: string | undefined, url?: string): boolean => {
+  if (url && SIGN_IN_PATH.test(url)) return false;
   if (status === 401) return true;
   const m = (message || '').toLowerCase();
   return m.includes('token') && (m.includes('not valid') || m.includes('invalid') || m.includes('expired'));
@@ -363,11 +369,13 @@ export const apiRequest = async (
 
     if (!response.ok) {
       const errorMessage =
-        data.message || `HTTP error! status: ${response.status}`;
+        response.status === 401 && SIGN_IN_PATH.test(url) && /invalid credentials/i.test(data.message || '')
+          ? 'Incorrect email or password.'
+          : data.message || `HTTP error! status: ${response.status}`;
       if (DEBUG_API) {
         console.error('[API Error Response]', { url, status: response.status, data: redact(data) });
       }
-      if (isAuthExpiredResponse(response.status, data.message)) {
+      if (isAuthExpiredResponse(response.status, data.message, url)) {
         handleAuthExpired();
         throw new Error(AUTH_EXPIRED_MESSAGE);
       }
@@ -457,7 +465,7 @@ export const apiClient: AxiosInstance = (() => {
       }
       const status = err.response?.status;
       const message = err.response?.data?.message;
-      if (status != null && isAuthExpiredResponse(status, message)) {
+      if (status != null && isAuthExpiredResponse(status, message, err.config?.url)) {
         handleAuthExpired();
         return Promise.reject(new Error(AUTH_EXPIRED_MESSAGE));
       }

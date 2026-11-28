@@ -210,20 +210,15 @@ export default function GameZoneScreen() {
 
         {/* Header */}
         <Animated.View style={[styles.header, { opacity: headerAnim, transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
-          {/* No back button: Game Zone is a tab, so there is nowhere to go
-              back to, and following the parent stack would drop the user out of
-              the tab navigator. The width is kept so the header does not shift. */}
-          <View style={styles.backBtn} />
+          {/* No back button: Game Zone is a tab. (The empty spacer that stood
+              in for it pushed the title out of line with the cards below.) */}
           <View style={styles.headerText}>
             <Text style={styles.headerTitle}>Game Zone</Text>
             <Text style={styles.headerSub}>
               {GAMES.length} games <Text style={styles.headerSubDot}>&middot;</Text> <Text style={styles.accent}>Earn GH/s</Text>
             </Text>
           </View>
-          <View style={styles.statusCapsule}>
-            <MaterialCommunityIcons name="lightning-bolt" size={13} color="#18D4F2" />
-            <Text style={styles.statusCapsuleTxt}>{GAMES.length}</Text>
-          </View>
+          {/* (The "24" capsule repeated the game count shown under the title.) */}
         </Animated.View>
 
         {/* Banner Ad below header, outside ScrollView for reliable rendering */}
@@ -331,11 +326,19 @@ export default function GameZoneScreen() {
                   );
                 })}
               </ScrollView>
-              {filtered.length > 1 && (
+              {filtered.length > 1 && filtered.length <= 8 && (
                 <View style={styles.dots}>
                   {filtered.map((_, i) => (
                     <View key={i} style={[styles.dot, i === featuredIndex && styles.dotActive]} />
                   ))}
+                </View>
+              )}
+              {/* A row of 24 dots ran edge to edge; a counter reads better. */}
+              {filtered.length > 8 && (
+                <View style={styles.dots}>
+                  <Text style={{ color: TEXT_DIM, fontSize: 13, fontWeight: '600' }}>
+                    {featuredIndex + 1} / {filtered.length}
+                  </Text>
                 </View>
               )}
             </Animated.View>

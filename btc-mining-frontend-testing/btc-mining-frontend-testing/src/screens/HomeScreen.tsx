@@ -3049,6 +3049,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B111D',
     padding: 20,
     borderRadius: 16,
+    marginTop: 12,
     // marginBottom: 16,
   },
 
@@ -3517,7 +3518,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     alignSelf: 'flex-start',
     marginTop: 6,
-    marginLeft: 28
+    marginLeft: 0
   },
 
   bonusTagText: {

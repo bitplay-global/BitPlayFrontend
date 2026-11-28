@@ -21,7 +21,7 @@ export interface PlanDetails {
     100: {
       hashrate: 100,
       apr: '70.25%',
-      offer: 'Buy 1,Get 1 free',
+      offer: 'Buy 1, Get 1 free',
       freeComputingPower: '+5.0%',
     },
     
@@ -29,7 +29,7 @@ export interface PlanDetails {
     200: {
       hashrate: 200,
       apr: '75.67%',
-      offer: 'Buy 1,Get 1 free',
+      offer: 'Buy 1, Get 1 free',
       freeComputingPower: '+10.0%',
     },
     
@@ -37,7 +37,7 @@ export interface PlanDetails {
     410: {
       hashrate: 410,
       apr: '80.50%',
-      offer: 'Buy 1,Get 1 free',
+      offer: 'Buy 1, Get 1 free',
       freeComputingPower: '+15.0%',
     },
     
@@ -45,7 +45,7 @@ export interface PlanDetails {
     1100: {
       hashrate: 1100,
       apr: '83.35%',
-      offer: 'Buy 1,Get 1 free',
+      offer: 'Buy 1, Get 1 free',
       freeComputingPower: '+25.0%',
     },
     
@@ -53,7 +53,7 @@ export interface PlanDetails {
     2300: {
       hashrate: 2300,
       apr: '87.55%',
-      offer: 'Buy 1,Get 1 free',
+      offer: 'Buy 1, Get 1 free',
       freeComputingPower: '+35.0%',
     },
     
@@ -61,7 +61,7 @@ export interface PlanDetails {
     3500: {
       hashrate: 3500,
       apr: '88.40%',
-      offer: 'Buy 1,Get 1 free',
+      offer: 'Buy 1, Get 1 free',
       freeComputingPower: '+40.0%',
     },
     
@@ -69,7 +69,7 @@ export interface PlanDetails {
     4700: {
       hashrate: 4700,
       apr: '89.01%',
-      offer: 'Buy 1,Get 1 free',
+      offer: 'Buy 1, Get 1 free',
       freeComputingPower: '+45.0%',
     },
     
@@ -77,7 +77,7 @@ export interface PlanDetails {
     10: {
       hashrate: 10,
       apr: '65.50%',
-      offer: 'Buy 1,Get 1 free',
+      offer: 'Buy 1, Get 1 free',
       freeComputingPower: '+2.0%',
     },
     
@@ -85,7 +85,7 @@ export interface PlanDetails {
     1000000: {
       hashrate: 1000000,
       apr: '95.00%',
-      offer: 'Buy 1,Get 1 free',
+      offer: 'Buy 1, Get 1 free',
       freeComputingPower: '+50.0%',
     },
   };
@@ -147,7 +147,7 @@ export interface PlanDetails {
   export const DEFAULT_PLAN_DETAILS: PlanDetails = {
     hashrate: 0,
     apr: '70.00%',
-    offer: 'Buy 1,Get 1 free',
+    offer: 'Buy 1, Get 1 free',
     freeComputingPower: '+5.0%',
   };
   

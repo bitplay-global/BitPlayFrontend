@@ -156,9 +156,14 @@ const MyProfileScreen = () => {
 
       {/* Top Bar */}
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={24} color="#fff" />
-        </TouchableOpacity>
+        {/* Profile is also a bottom tab; a back arrow there led nowhere useful. */}
+        {(navigation.getState?.() as any)?.type === 'tab' ? (
+          <View style={{ width: 24 }} />
+        ) : (
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Icon name="arrow-left" size={24} color="#fff" />
+          </TouchableOpacity>
+        )}
         <Text style={styles.topBarTitle}>My Profile</Text>
         <View style={{ width: 24 }} />
       </View>
@@ -173,9 +178,10 @@ const MyProfileScreen = () => {
         <View style={styles.idSection}>
           <View style={styles.idContent}>
             <View style={styles.idRow}>
-              <Text style={styles.idText}>ID: {user?.id?.slice(-7) ?? ''}</Text>
-              <Text style={styles.timezoneValue} numberOfLines={2}>
-                {displayTimezone}
+              {/* Name first; the raw time zone ("Asia/Calcutta") meant nothing to users. */}
+              <Text style={styles.idText} numberOfLines={1}>{user?.name || 'BitPlay user'}</Text>
+              <Text style={styles.timezoneValue} numberOfLines={1}>
+                ID: {user?.id?.slice(-7) ?? ''}
               </Text>
             </View>
             {/* <TouchableOpacity style={styles.inviteCodeBox}>
