@@ -211,6 +211,20 @@ const WithdrawScreen = () => {
     setRefreshing(false);
   }, [fetchBalance, fetchWithdrawalLimits]);
 
+  // Withdrawals are closed to users flagged in a restricted (sanctioned)
+  // region -- backend GET /api/withdrawals/eligibility/:userId. Say so up front
+  // instead of letting them fill in the form; the server refuses it anyway.
+  const [restrictedMsg, setRestrictedMsg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    fetch(`${get_data_uri('CREATE_WITHDRAWAL')}/eligibility/${user.id}`, { headers: getMobileSecurityHeaders() })
+      .then(r => r.json())
+      .then(d => { if (alive) setRestrictedMsg(d && d.allowed === false ? String(d.message || 'Withdrawals are not available in your region.') : null); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [user?.id]);
+
   // Fetch wallet balance when screen loads
   useEffect(() => {
     refreshData();
@@ -257,6 +271,10 @@ const WithdrawScreen = () => {
 
   // Handle Withdraw
   const handleWithdraw = async () => {
+    if (restrictedMsg) {
+      Alert.alert('Withdrawals unavailable', restrictedMsg);
+      return;
+    }
     if (amountUSD == null) {
       Alert.alert(
         'Price unavailable',
@@ -445,12 +463,19 @@ const WithdrawScreen = () => {
           />
         )}
 
+        {restrictedMsg ? (
+          <View style={styles.restrictedBox}>
+            <Text style={styles.restrictedTitle}>Withdrawals unavailable</Text>
+            <Text style={styles.restrictedText}>{restrictedMsg}</Text>
+          </View>
+        ) : null}
+
         {/* Confirm Button */}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={handleWithdraw}
-          disabled={isSubmitting}
-          style={[styles.withdrawButton, isSubmitting && styles.disabledButton]}
+          disabled={isSubmitting || !!restrictedMsg}
+          style={[styles.withdrawButton, (isSubmitting || !!restrictedMsg) && styles.disabledButton]}
         >
           <LinearGradient
             colors={['#4F46E5', '#9333EA']}
@@ -458,7 +483,7 @@ const WithdrawScreen = () => {
             end={{ x: 1, y: 0 }}
             style={styles.actionButton}
           >
-            <Text style={styles.confirmText}>Withdraw</Text>
+            <Text style={styles.confirmText}>{restrictedMsg ? 'Not available in your region' : 'Withdraw'}</Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -552,6 +577,9 @@ const WithdrawScreen = () => {
 export default WithdrawScreen;
 
 const styles = StyleSheet.create({
+  restrictedBox: { marginHorizontal: 16, marginBottom: 12, padding: 14, borderRadius: 12, backgroundColor: 'rgba(239,68,68,0.12)', borderWidth: 1, borderColor: 'rgba(248,113,113,0.4)' },
+  restrictedTitle: { color: '#FCA5A5', fontSize: 15, fontWeight: '800', marginBottom: 4 },
+  restrictedText: { color: '#FECACA', fontSize: 13.5, lineHeight: 19 },
   container: { flex: 1, backgroundColor: '#15213B' },
   topBar: {
     flexDirection: 'row',
