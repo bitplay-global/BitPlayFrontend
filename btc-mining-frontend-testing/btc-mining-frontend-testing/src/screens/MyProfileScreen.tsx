@@ -10,6 +10,7 @@ import {
   ImageBackground,
   Modal,
   Linking,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -340,6 +341,8 @@ const MyProfileScreen = () => {
             <Icon name="chevron-right" size={22} color="#666" />
           </TouchableOpacity>
 
+          {/* Apple's standard EULA applies to the App Store build only. */}
+          {Platform.OS === 'ios' && (
           <TouchableOpacity
             style={styles.menuItem}
             onPress={() => navigation.navigate('WebViewScreen', {
@@ -351,6 +354,7 @@ const MyProfileScreen = () => {
             <Text style={styles.menuText}>Apple Terms</Text>
             <Icon name="chevron-right" size={22} color="#666" />
           </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[styles.menuItem, styles.lastMenuItem]}
