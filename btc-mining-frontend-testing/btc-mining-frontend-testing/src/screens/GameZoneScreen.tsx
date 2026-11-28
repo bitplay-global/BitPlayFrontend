@@ -274,7 +274,7 @@ export default function GameZoneScreen() {
           {/* Section label */}
           <View style={styles.sectionTitleRow}>
             <Text style={styles.sectionTitle}>{activeCategory === 'All' ? 'All Games' : 'Featured'}</Text>
-            <Text style={styles.sectionCount}>{filtered.length} games</Text>
+            <Text style={styles.sectionCount}>{filtered.length} {filtered.length === 1 ? 'game' : 'games'}</Text>
           </View>
 
           {showFeaturedCarousel ? (

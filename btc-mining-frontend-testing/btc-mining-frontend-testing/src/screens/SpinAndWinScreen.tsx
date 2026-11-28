@@ -841,12 +841,16 @@ const SpinAndWinScreen: React.FC = () => {
                 spinHistory.slice(0, 20).map((item, idx, arr) => {
                   const isLost = item.status === 'lose';
                   const isClaimed = item.status === 'claimed';
-                  const tone = isClaimed ? '#4ADE80' : isLost ? '#F87171' : '#F59E0B';
+                  // Only the win on screen right now is pending; an older unclaimed
+                  // win was skipped ("No thanks") and can no longer be claimed.
+                  const isPendingNow = !isLost && !isClaimed && phase === 'won_pending' && item.id === pendingHistoryId.current;
+                  const isSkipped = !isLost && !isClaimed && !isPendingNow;
+                  const tone = isClaimed ? '#4ADE80' : isLost ? '#F87171' : isSkipped ? '#64748B' : '#F59E0B';
                   return (
                     <View key={item.id} style={[styles.historyRow, idx === arr.length - 1 && styles.historyRowLast]}>
                       <View style={[styles.historyIcon, { backgroundColor: `${tone}1F`, borderColor: `${tone}55` }]}>
                         <Icon
-                          name={isClaimed ? 'check' : isLost ? 'close' : 'clock-outline'}
+                          name={isClaimed ? 'check' : isLost ? 'close' : isSkipped ? 'minus' : 'clock-outline'}
                           size={16}
                           color={tone}
                         />
@@ -856,9 +860,9 @@ const SpinAndWinScreen: React.FC = () => {
                         <Text style={styles.historyDate} numberOfLines={1}>{new Date(item.ts).toLocaleString()}</Text>
                       </View>
                       <View style={styles.historyRight}>
-                        <Text style={[styles.historyAmount, isLost && styles.historyAmountLost]}>+{item.gh} Gh/s</Text>
+                        <Text style={[styles.historyAmount, (isLost || isSkipped) && styles.historyAmountLost]}>+{item.gh} Gh/s</Text>
                         <Text style={[styles.historyStatus, { color: tone }]}>
-                          {isClaimed ? 'Claimed' : isLost ? 'Lost' : 'Pending'}
+                          {isClaimed ? 'Claimed' : isLost ? 'Lost' : isSkipped ? 'Skipped' : 'Pending'}
                         </Text>
                       </View>
                     </View>
