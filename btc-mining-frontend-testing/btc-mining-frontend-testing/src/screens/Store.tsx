@@ -837,7 +837,7 @@ const StoreScreen = () => {
             Packs are monthly subscriptions that renew automatically at the price shown until cancelled.
             Payment is charged to your {Platform.OS === 'ios' ? 'Apple ID' : 'Google Play'} account. Cancel anytime in
             {Platform.OS === 'ios' ? ' Settings > Apple ID > Subscriptions' : ' Google Play > Payments & subscriptions'} at
-            least 24 hours before the renewal date. Mining power is a reward in BitPlay and has no cash value.
+            least 24 hours before the renewal date. Mining power earns BitPlay rewards; it is not an investment and rewards are not guaranteed.
           </Text>
           <TouchableOpacity onPress={handleRestorePurchases} style={styles.restoreButton} accessibilityRole="button">
             <Text style={styles.restoreText}>Restore Purchases</Text>
@@ -866,7 +866,7 @@ const StoreScreen = () => {
             </Text>
             <View style={styles.saveBadge}>
               <Text style={styles.saveBadgeText}>
-                Save {((selectedPlan.maintenance_cost / selectedPlan.plan_cost) * 100).toFixed(2)}%
+                Save {Math.round((selectedPlan.maintenance_cost / selectedPlan.plan_cost) * 100)}%
               </Text>
             </View>
           </View>
@@ -897,7 +897,7 @@ const StoreScreen = () => {
                     </>
                   ) : (
                     <>
-                      <Text style={styles.mintPrice}>Mint {formatPrice(selectedPlan.plan_cost, 'USD')}</Text>
+                      <Text style={styles.mintPrice}>Subscribe {formatPrice(selectedPlan.plan_cost, 'USD')}/month</Text>
                     </>
                   )}
                 </>

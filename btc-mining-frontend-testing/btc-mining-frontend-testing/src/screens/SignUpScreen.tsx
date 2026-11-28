@@ -19,7 +19,12 @@ import { RootStackParamList } from '../components/types';
 import LinearGradient from 'react-native-linear-gradient';
 import { apiRequest, API_ENDPOINTS } from '../config/api';
 import { getPendingReferralCode, clearPendingReferralCode } from '../utils/referralLink';
-import { Image } from 'react-native';
+import { Image, Linking } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+
+const TERMS_URL = 'https://bitplaypro.com/terms-and-conditions/';
+const PRIVACY_URL = 'https://bitplaypro.com/privacy-policy/';
+
 import { useAuth } from '../auth/AuthProvider';
 import { getUser, getSession } from '../auth/auth';
 import {
@@ -253,7 +258,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = () => {
 
                   <View style={{ marginBottom: 15 }}>
                     <View style={styles.inputWrapper}>
-                      <Image source={require('../assets/images/icon_input_box_pass.png')} style={styles.inputIconImage} />
+                      <Icon name="gift-outline" size={20} color="#D1D5DB" style={{ marginRight: 8 }} />
                       <TextInput
                         style={{ ...styles.input, flex: 1 }}
                         placeholder="REFERRAL (OPTIONAL)"
@@ -404,7 +409,12 @@ const SignUpScreen: React.FC<SignUpScreenProps> = () => {
               )}
 
               <View style={styles.footer}>
-                <Text style={styles.footerText}>BitPlayPro</Text>
+                <Text style={[styles.footerText, { textAlign: 'center', paddingHorizontal: 24 }]}>
+                  By signing up you agree to our{' '}
+                  <Text style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Use</Text>
+                  {' '}and{' '}
+                  <Text style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>.
+                </Text>
               </View>
 
             </View>
