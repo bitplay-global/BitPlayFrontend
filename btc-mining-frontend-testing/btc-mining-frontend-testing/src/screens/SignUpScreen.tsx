@@ -294,6 +294,14 @@ const SignUpScreen: React.FC<SignUpScreenProps> = () => {
                     </LinearGradient>
                   </TouchableOpacity>
 
+                  {/* Agreement line under the button: at the screen bottom it sat
+                      under the gesture bar and was cut off. */}
+                  <Text style={[styles.footerText, { textAlign: 'center', marginTop: 12, opacity: 0.85 }]}>
+                    By signing up you agree to our{' '}
+                    <Text style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Use</Text>
+                    {' '}and{' '}
+                    <Text style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>.
+                  </Text>
                   {/* Already a user */}
                   <TouchableOpacity
                     style={{ marginTop: 10, alignItems: 'center' }}
@@ -408,15 +416,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = () => {
                 </>
               )}
 
-              {/* In normal flow (the absolute footer sat below the visible area). */}
-              <View style={{ alignItems: 'center', marginTop: 18, marginBottom: 12 }}>
-                <Text style={[styles.footerText, { textAlign: 'center', paddingHorizontal: 24 }]}>
-                  By signing up you agree to our{' '}
-                  <Text style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Use</Text>
-                  {' '}and{' '}
-                  <Text style={{ textDecorationLine: 'underline' }} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>.
-                </Text>
-              </View>
+
 
             </View>
           </ScrollView>
