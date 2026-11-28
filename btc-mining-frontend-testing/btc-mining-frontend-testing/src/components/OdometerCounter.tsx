@@ -9,7 +9,9 @@ import Animated, {
 import LinearGradient from 'react-native-linear-gradient';
 
 const DIGIT_HEIGHT = 22; // 2px taller than font to prevent Android clipping artifact
-const ANIMATION_DURATION = 800; // Faster for snappier feel
+// The balance ticks every second; an 800 ms roll meant most frames showed
+// two half digits, so the number looked scrambled. Roll quickly instead.
+const ANIMATION_DURATION = 220;
 
 // B, T, C kept in strip so " BTC" scrolls inside the odometer (original design)
 const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '.', ' ', 'B', 'T', 'C'];
@@ -116,6 +118,7 @@ const styles = StyleSheet.create({
         lineHeight: DIGIT_HEIGHT,
         textAlign: 'center',
         fontVariant: ['tabular-nums'],
+        includeFontPadding: false,
         fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     },
     gradientTop: {
